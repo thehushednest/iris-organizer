@@ -27,12 +27,13 @@ class OrganizerService extends EventEmitter {
     return [
       `*${this.config.botName}*`,
       "",
-      "Perintah khusus:",
+      "Bapak bisa menulis bebas, misalnya:",
       "1. `help`",
       "2. `catat: isi catatan`",
-      "3. `cari: kata kunci`",
-      "4. `kirim: nomor hasil`",
-      "5. `batal`",
+      "3. `cari: kata kunci` atau `tolong carikan file kontrak`",
+      "4. `list dokumen`, `dokumen apa saja yang ada`, atau `cari dokumen yang ada, kirim listnya`",
+      "5. `kirim 1` atau `kirim file pertama`",
+      "6. `batal`",
       "",
       `Kalau ${this.config.ownerTitle} kirim file tanpa konteks, saya akan tanya dulu apakah file itu mau disimpan dan namanya apa.`,
     ].join("\n");
@@ -65,6 +66,54 @@ class OrganizerService extends EventEmitter {
 
   isNegative(text) {
     return /^(tidak|ga|gak|nggak|jangan|batal|cancel)\b/i.test(String(text).trim());
+  }
+
+  normalizeIntentText(text) {
+    return String(text || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  isListDocumentsIntent(text) {
+    const normalized = this.normalizeIntentText(text);
+    if (!normalized) return false;
+
+    const mentionsDocuments = /\b(dokumen|dokumeny|file|arsip|berkas|data|folder|storage|koleksi)\b/i.test(
+      normalized,
+    );
+    const asksForList = /\b(list|listnya|daftar|daftarnya|tampilkan|lihat|cek|cari|carikan|kirimi|kirimkan|kasih|apa saja|apa aja)\b/i.test(
+      normalized,
+    );
+    const broadScope = /\b(yang ada|semua|tersimpan|terbaru|terakhir|punya|koleksi|arsipku|fileku|dokumenku)\b/i.test(
+      normalized,
+    );
+
+    return (
+      (mentionsDocuments && asksForList && broadScope) ||
+      /\b(list|daftar)\s+(dokumen|dokumeny|file|arsip|berkas|data)\b/i.test(normalized) ||
+      /\b(dokumen|dokumeny|file|arsip|berkas|data)\s+(apa saja|apa aja|yang ada|tersimpan|terbaru|terakhir)\b/i.test(
+        normalized,
+      ) ||
+      /\b(kirim|kirimi|kirimkan|kasih)\s+(list|listnya|daftar|daftarnya)\b/i.test(normalized)
+    );
+  }
+
+  cleanSearchQuery(text) {
+    let cleaned = String(text || "").trim();
+    cleaned = cleaned
+      .replace(/^(tolong|mohon|boleh|bisa|bisakah)\s+/i, "")
+      .replace(/^(kamu\s+)?(bantu\s+)?(saya\s+)?/i, "")
+      .replace(/^(cari|carikan|cek|lihat|tampilkan|temukan|find)\s*:?\s*/i, "")
+      .replace(/^(dokumen|dokumeny|file|arsip|berkas|data)(\s+(tentang|mengenai|soal|untuk))?\s*/i, "")
+      .replace(/\b(kirim|kirimi|kirimkan|kasih|tampilkan)\s+(list|listnya|daftar|daftarnya)\b/gi, "")
+      .replace(/\b(dokumen|dokumeny|file|arsip|berkas|data)\s+(yang\s+ada|tersimpan|semua|apa\s+saja|apa\s+aja)\b/gi, "")
+      .replace(/\b(yang\s+ada|semua|tersimpan|listnya|daftarnya)\b/gi, "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    return cleaned.replace(/^[,.:;\-\s]+|[,.:;\-\s]+$/g, "").trim();
   }
 
   deriveTitleFromConfirmation(text) {
@@ -152,6 +201,38 @@ class OrganizerService extends EventEmitter {
       this.client,
       incoming.chatId,
       `Saya menemukan ${results.length} data untuk "${query}":\n\n${this.buildResultList(results)}\n\nKalau ${this.config.ownerTitle} ingin saya kirimkan, balas misalnya "kirim 1".`,
+    );
+  }
+
+  async handleListDocuments(incoming, state, limit = 10) {
+    const docs = (await this.store.listDocuments())
+      .slice()
+      .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")))
+      .slice(0, limit);
+
+    if (docs.length === 0) {
+      await sendText(this.client, incoming.chatId, "Belum ada dokumen tersimpan.");
+      return;
+    }
+
+    const results = docs.map((record) => ({ record, score: 1 }));
+    await this.store.saveConversation({
+      ...state,
+      chatId: incoming.chatId,
+      senderNumber: incoming.senderNumber,
+      lastSearchQuery: "__list_documents__",
+      lastSearchResultIds: docs.map((item) => item.id),
+      pendingAction: {
+        type: "search_delivery",
+        searchQuery: "__list_documents__",
+        searchResultIds: docs.map((item) => item.id),
+      },
+    });
+
+    await sendText(
+      this.client,
+      incoming.chatId,
+      `Saya menemukan ${docs.length} dokumen tersimpan terbaru:\n\n${this.buildResultList(results)}\n\nKalau ${this.config.ownerTitle} ingin saya kirimkan, balas misalnya "kirim 1".`,
     );
   }
 
@@ -311,8 +392,18 @@ class OrganizerService extends EventEmitter {
       return;
     }
 
-    if (/^cari\s*:?\s*/i.test(text)) {
-      await this.handleSearch(incoming, state, text.replace(/^cari\s*:?\s*/i, "").trim());
+    if (this.isListDocumentsIntent(text)) {
+      await this.handleListDocuments(incoming, state);
+      return;
+    }
+
+    if (/^(cari|carikan|cek|lihat|tampilkan|temukan)\b\s*:?\s*/i.test(text)) {
+      const query = this.cleanSearchQuery(text);
+      if (!query) {
+        await this.handleListDocuments(incoming, state);
+        return;
+      }
+      await this.handleSearch(incoming, state, query);
       return;
     }
 
@@ -367,7 +458,12 @@ class OrganizerService extends EventEmitter {
     }
 
     if (decision.intent === "search") {
-      await this.handleSearch(incoming, state, decision.searchQuery || text);
+      const query = this.cleanSearchQuery(decision.searchQuery || text);
+      if (!query || this.isListDocumentsIntent(text)) {
+        await this.handleListDocuments(incoming, state);
+        return;
+      }
+      await this.handleSearch(incoming, state, query);
       return;
     }
 
