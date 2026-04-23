@@ -315,6 +315,39 @@ function getMentionDebug(client, message) {
   };
 }
 
+function collectMentionedJids(message) {
+  return getContextInfoCandidates(message).flatMap((contextInfo) =>
+    Array.isArray(contextInfo.mentionedJid) ? contextInfo.mentionedJid : [],
+  );
+}
+
+function sanitizeIncomingText(message, mentionsBot) {
+  const rawText = getMessageText(message);
+  if (!mentionsBot) {
+    return rawText;
+  }
+
+  const mentionedHandles = Array.from(
+    new Set(
+      collectMentionedJids(message)
+        .map((jid) => String(jid || "").split("@")[0].replace(/\D/g, ""))
+        .filter(Boolean),
+    ),
+  );
+
+  let sanitized = rawText;
+  mentionedHandles.forEach((handle) => {
+    sanitized = sanitized.replace(new RegExp(`@${handle}\\b`, "gi"), " ");
+  });
+
+  sanitized = sanitized
+    .replace(/\s+/g, " ")
+    .replace(/^[,.:;\-\s]+|[,.:;\-\s]+$/g, "")
+    .trim();
+
+  return sanitized || rawText;
+}
+
 async function downloadMediaFromContent(content) {
   const { downloadContentFromMessage, getContentType } = await getBaileys();
   const unwrapped = unwrapMessageContent(content || {});
@@ -546,6 +579,8 @@ async function normalizeIncoming(config, client, message, hooks = {}) {
     contextInfo && contextInfo.quotedMessage
       ? await downloadMediaFromContent(contextInfo.quotedMessage).catch(() => null)
       : null;
+  const rawText = getMessageText(message);
+  const sanitizedText = groupMessage ? sanitizeIncomingText(message, mentionsBot) : rawText;
 
   return {
     chatId,
@@ -554,7 +589,8 @@ async function normalizeIncoming(config, client, message, hooks = {}) {
     isGroup: groupMessage,
     mentionsBot,
     messageId: message.key && message.key.id,
-    text: getMessageText(message),
+    text: sanitizedText,
+    rawText,
     media: await extractMedia(client, message),
     quotedMedia,
     quotedText: normalizeText(

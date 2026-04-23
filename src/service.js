@@ -289,6 +289,23 @@ class OrganizerService extends EventEmitter {
     );
   }
 
+  looksLikeExplicitSearchRequest(text) {
+    const normalized = String(text || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    if (!normalized) return false;
+    if (this.looksLikeDocumentListRequest(normalized)) return false;
+    if (this.looksLikeGeneralInfoRequest(normalized)) return false;
+
+    return (
+      /^(cari|carikan|cek|lihat|tampilkan|temukan|find)\b/.test(normalized) &&
+      /\b(dokumen|file|arsip|berkas|data)\b/.test(normalized)
+    ) || /^(cari|carikan|find)\s*:/i.test(String(text || "").trim());
+  }
+
   shouldHandleSendFollowupLocally(text, lastSearchResults) {
     if (!Array.isArray(lastSearchResults) || lastSearchResults.length === 0) {
       return false;
@@ -370,7 +387,25 @@ class OrganizerService extends EventEmitter {
         .trim();
     }
 
+    if (this.isWeakMediaNamingReply(cleaned)) {
+      return null;
+    }
+
     return cleaned || null;
+  }
+
+  isWeakMediaNamingReply(text) {
+    const normalized = String(text || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    if (!normalized) return true;
+
+    return /^(ya|iya|yup|sip|siap|ok|oke|okay|boleh|silakan|lanjut|gas|monggo|mangga|setuju|yes|simpan)$/.test(
+      normalized,
+    );
   }
 
   isGenericMediaSaveTitle(title) {
@@ -381,6 +416,7 @@ class OrganizerService extends EventEmitter {
       .trim();
 
     if (!normalized) return true;
+    if (this.isWeakMediaNamingReply(normalized)) return true;
 
     return /^(?:ini|file|file ini|dokumen|dokumen ini|gambar|gambar ini|foto|foto ini|image|image ini|lampiran|lampiran ini|berkas|berkas ini|video|video ini|audio|audio ini)$/i.test(
       normalized,
@@ -539,6 +575,8 @@ class OrganizerService extends EventEmitter {
           "Berita/terbaru/terkini/penelusuran web berarti ask_general_info kecuali user menyebut dokumen saya.",
           "Untuk ask_general_info, reply harus jawaban final dalam satu respons. Jangan kirim status proses tanpa hasil akhir.",
           "Pertanyaan identitas bot seperti siapa kamu berarti ask_general_info, bukan help.",
+          "Saat pendingAction media_save_confirmation, jawaban seperti oke/ya/sip belum cukup sebagai nama file. Minta nama file yang jelas.",
+          "Obrolan santai atau candaan di grup yang tidak meminta arsip jangan diubah menjadi search_documents.",
         ],
         storedDocumentCount: documents.length,
         canBrowseExternally: true,
@@ -868,6 +906,19 @@ class OrganizerService extends EventEmitter {
     if (this.shouldHandleSendFollowupLocally(text, lastSearchResults)) {
       await this.handleSend(incoming, state, text);
       return;
+    }
+
+    if (this.looksLikeDocumentListRequest(text)) {
+      await this.handleListDocuments(incoming, state);
+      return;
+    }
+
+    if (this.looksLikeExplicitSearchRequest(text)) {
+      const query = this.cleanSearchQuery(text);
+      if (query) {
+        await this.handleSearch(incoming, state, query);
+        return;
+      }
     }
 
     const decision = await decideIntent(this.config, await this.buildIrisPayload(incoming, state, lastSearchResults));

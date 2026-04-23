@@ -9,6 +9,8 @@ const INTENT_GUIDANCE = [
   "Pertanyaan 'siapa kamu', 'jelaskan kamu', dan sapaan tentang identitas bot adalah ask_general_info, bukan help.",
   "Jika user mencari arsip lokal, gunakan search_documents dengan searchQuery yang bersih dari kata perintah.",
   "Saat pendingAction media_save_confirmation, jawaban setuju/nama file harus menjadi save_media.",
+  "Saat pendingAction media_save_confirmation, jawaban lemah seperti 'oke', 'ya', 'sip', atau 'lanjut' belum cukup sebagai judul file. Minta nama file yang jelas.",
+  "Obrolan santai, candaan, atau keluhan di grup yang tidak meminta arsip lokal jangan diubah menjadi search_documents.",
 ];
 
 const INTENT_EXAMPLES = [
@@ -69,6 +71,18 @@ const INTENT_EXAMPLES = [
     note: "Judul adalah bagian natural setelah nama/judul/sebagai, bukan seluruh kalimat.",
   },
   {
+    id: "pending-media-weak-confirmation",
+    triggers: ["oke", "ok", "sip", "ya", "iya", "lanjut"],
+    requiresPendingAction: "media_save_confirmation",
+    context: "Bot sedang menunggu nama file, tetapi user hanya memberi konfirmasi singkat.",
+    userText: "oke",
+    decision: {
+      intent: "clarify",
+      reply: "Siap. Mau saya simpan dengan nama apa?",
+    },
+    note: "Jangan jadikan kata konfirmasi singkat sebagai judul file.",
+  },
+  {
     id: "general-self-intro",
     triggers: ["kamu siapa", "siapa kamu", "bisa apa", "jelaskan kamu", "jelaskan kamu siapa"],
     context: "User bertanya identitas/kemampuan bot.",
@@ -79,6 +93,17 @@ const INTENT_EXAMPLES = [
         "Saya IRIS Organizer, bot WhatsApp yang membantu menyimpan, mencari, dan mengirim kembali dokumen lokal Bapak.",
     },
     note: "Jangan tampilkan help kecuali user eksplisit meminta help/cara pakai.",
+  },
+  {
+    id: "group-small-talk",
+    triggers: ["wkwk", "wk", "haha", "kok kamu", "masih bloon", "payah", "tes"],
+    context: "User mention bot di grup, tetapi tidak meminta pencarian dokumen atau aksi arsip.",
+    userText: "wkwkwkw kok kamu masih bloon siiih",
+    decision: {
+      intent: "clarify",
+      reply: "Kalau mau, saya bisa bantu cari arsip, kirim file, atau simpan dokumen. Tinggal bilang kebutuhannya ya.",
+    },
+    note: "Jangan jadikan obrolan santai atau candaan sebagai search_documents.",
   },
   {
     id: "general-current-info",
