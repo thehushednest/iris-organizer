@@ -289,8 +289,9 @@ function getOwnIdentityAliases(client) {
 }
 
 function hasBotMention(client, message) {
-  const contextInfo = getContextInfo(message);
-  const mentioned = Array.isArray(contextInfo.mentionedJid) ? contextInfo.mentionedJid : [];
+  const mentioned = getContextInfoCandidates(message).flatMap((contextInfo) =>
+    Array.isArray(contextInfo.mentionedJid) ? contextInfo.mentionedJid : [],
+  );
   if (mentioned.length === 0) {
     return false;
   }
