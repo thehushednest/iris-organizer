@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>IRIS Remote Organizer</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="hero-panel">
+        <div class="brand-lockup">
+          <img src="./assets/logo.svg" alt="IRIS Remote Organizer" class="brand-logo" />
+          <div>
+            <div class="hero-badge">Windows App</div>
+            <h1>IRIS Remote Organizer</h1>
+          </div>
+        </div>
+        <p>
+          Aplikasi desktop untuk menjalankan bot WhatsApp organizer tanpa perlu edit file
+          konfigurasi manual.
+        </p>
+        <div class="guide-card">
+          <div class="guide-title">Alur Cepat</div>
+          <ol class="guide-list">
+            <li>Isi konfigurasi IRIS dan WhatsApp.</li>
+            <li>Klik <strong>Cek Koneksi IRIS</strong>.</li>
+            <li>Klik <strong>Jalankan Bot</strong>.</li>
+            <li>Scan QR WhatsApp.</li>
+            <li>Mulai kirim dokumen ke bot.</li>
+          </ol>
+        </div>
+        <div class="status-card">
+          <div class="status-label">Status Bot</div>
+          <div id="statusText" class="status-value">Belum berjalan</div>
+          <div id="statusHint" class="status-hint">Simpan konfigurasi lalu tekan Jalankan Bot.</div>
+        </div>
+        <div class="quick-actions">
+          <button id="openStorageBtn" class="ghost-btn">Buka Folder Arsip</button>
+          <button id="openLogsBtn" class="ghost-btn">Buka Folder Log</button>
+          <button id="openRuntimeBtn" class="ghost-btn">Buka Folder Runtime</button>
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <section class="card form-card">
+          <div class="card-head">
+            <div>
+              <h2>Konfigurasi Bot</h2>
+              <p>Isi sekali saja. Setelah itu kolega cukup tekan tombol jalankan.</p>
+            </div>
+            <div class="button-row">
+              <button id="importBtn" class="secondary-btn">Impor Template</button>
+              <button id="exportBtn" class="secondary-btn">Ekspor Template</button>
+              <button id="testIrisBtn" class="secondary-btn">Cek Koneksi IRIS</button>
+              <button id="saveBtn" class="secondary-btn">Simpan</button>
+              <button id="startBtn" class="primary-btn">Jalankan Bot</button>
+              <button id="stopBtn" class="danger-btn">Hentikan</button>
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <label>
+              <span>Nama Bot</span>
+              <input id="botName" type="text" />
+            </label>
+            <label>
+              <span>Sapaan Pengguna</span>
+              <input id="ownerTitle" type="text" />
+            </label>
+            <label>
+              <span>Nomor WhatsApp Diizinkan</span>
+              <input id="allowedNumbers" type="text" placeholder="628123...,628456..." />
+            </label>
+            <label>
+              <span>Kategori Default</span>
+              <input id="defaultCategory" type="text" />
+            </label>
+            <label>
+              <span>IP / URL Server IRIS</span>
+              <input id="irisBaseUrl" type="text" />
+            </label>
+            <label>
+              <span>Path Endpoint IRIS</span>
+              <input id="irisDecidePath" type="text" />
+            </label>
+            <label>
+              <span>Token Internal IRIS</span>
+              <input id="irisApiToken" type="password" />
+            </label>
+            <label>
+              <span>Token API Lokal Bot</span>
+              <input id="botApiToken" type="password" />
+            </label>
+            <label>
+              <span>Port Lokal Bot</span>
+              <input id="botHttpPort" type="text" />
+            </label>
+            <label>
+              <span>Timeout IRIS (ms)</span>
+              <input id="irisTimeoutMs" type="text" />
+            </label>
+            <label class="checkbox-row">
+              <input id="irisFallbackEnabled" type="checkbox" />
+              <span>Aktifkan fallback sederhana jika server IRIS tidak bisa dihubungi</span>
+            </label>
+          </div>
+        </section>
+
+        <section class="columns">
+          <section class="card qr-card">
+            <div class="card-head">
+              <div>
+                <h2>QR WhatsApp</h2>
+                <p>Scan QR ini dengan WhatsApp milik kolega yang akan dipakai bot.</p>
+              </div>
+              <div id="qrStateBadge" class="state-badge idle">Belum Ada QR</div>
+            </div>
+            <pre id="qrBox" class="qr-box">QR belum tersedia.</pre>
+          </section>
+
+          <section class="card log-card">
+            <div class="card-head">
+              <div>
+                <h2>Log</h2>
+                <p>Status proses bot dan koneksi akan tampil di sini.</p>
+              </div>
+              <div id="connectionBadge" class="state-badge idle">Idle</div>
+            </div>
+            <pre id="logBox" class="log-box">Belum ada log.</pre>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <script src="./renderer.js"></script>
+  </body>
+  </html>

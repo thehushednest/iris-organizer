@@ -1,0 +1,13 @@
+{
+  "botName": "IRIS Organizer",
+  "ownerTitle": "Bapak",
+  "allowedNumbers": "6281234567890",
+  "botApiToken": "ganti-token-lokal-bot",
+  "botHttpPort": "8031",
+  "irisBaseUrl": "https://iris.cakrawalasasmita.com",
+  "irisDecidePath": "/api/internal/organizer/decide",
+  "irisApiToken": "ganti-token-internal-iris",
+  "irisTimeoutMs": "40000",
+  "irisFallbackEnabled": true,
+  "defaultCategory": "umum"
+}

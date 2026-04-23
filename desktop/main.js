@@ -1,0 +1,296 @@
+const fs = require("node:fs/promises");
+const path = require("node:path");
+const { app, BrowserWindow, ipcMain, dialog } = require("electron");
+const axios = require("axios");
+
+const { createConfig } = require("../src/config");
+const { OrganizerService } = require("../src/service");
+
+let mainWindow = null;
+let service = null;
+let serviceConfig = null;
+let logBuffer = [];
+
+function getSettingsPaths() {
+  const baseDir = app.getPath("userData");
+  return {
+    baseDir,
+    settingsPath: path.join(baseDir, "settings.json"),
+    runtimeRoot: path.join(baseDir, "runtime"),
+  };
+}
+
+function defaultSettings() {
+  return {
+    botName: "IRIS Organizer",
+    ownerTitle: "Bapak",
+    allowedNumbers: "",
+    botApiToken: "local-bot-token",
+    botHttpPort: "8030",
+    irisBaseUrl: "http://127.0.0.1:3000",
+    irisDecidePath: "/api/internal/organizer/decide",
+    irisApiToken: "",
+    irisTimeoutMs: "40000",
+    irisFallbackEnabled: true,
+    defaultCategory: "umum",
+  };
+}
+
+async function loadSettings() {
+  const { settingsPath } = getSettingsPaths();
+  try {
+    const raw = await fs.readFile(settingsPath, "utf8");
+    return { ...defaultSettings(), ...JSON.parse(raw) };
+  } catch {
+    return defaultSettings();
+  }
+}
+
+async function saveSettings(settings) {
+  const { settingsPath } = getSettingsPaths();
+  await fs.mkdir(path.dirname(settingsPath), { recursive: true });
+  await fs.writeFile(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, "utf8");
+}
+
+function buildServiceConfigFromSettings(settings) {
+  const { baseDir, runtimeRoot } = getSettingsPaths();
+
+  return createConfig(
+    {
+      TZ: "Asia/Jakarta",
+      BOT_NAME: settings.botName,
+      BOT_OWNER_TITLE: settings.ownerTitle,
+      WHATSAPP_ALLOWED_NUMBERS: settings.allowedNumbers,
+      WHATSAPP_SESSION_DIR: path.join(runtimeRoot, "session"),
+      STORAGE_ROOT: path.join(runtimeRoot, "storage"),
+      STATE_ROOT: path.join(runtimeRoot, "state"),
+      LOG_ROOT: path.join(runtimeRoot, "logs"),
+      DEFAULT_CATEGORY: settings.defaultCategory,
+      BOT_HTTP_HOST: "127.0.0.1",
+      BOT_HTTP_PORT: settings.botHttpPort,
+      BOT_API_TOKEN: settings.botApiToken,
+      IRIS_BASE_URL: settings.irisBaseUrl,
+      IRIS_DECIDE_PATH: settings.irisDecidePath,
+      IRIS_API_TOKEN: settings.irisApiToken,
+      IRIS_TIMEOUT_MS: settings.irisTimeoutMs,
+      IRIS_FALLBACK_ENABLED: String(Boolean(settings.irisFallbackEnabled)),
+    },
+    { cwd: baseDir },
+  );
+}
+
+function pushLog(message) {
+  const line = `[${new Date().toLocaleTimeString()}] ${message}`;
+  logBuffer = [...logBuffer.slice(-199), line];
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send("service-log", line);
+  }
+}
+
+function emitStatus() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return;
+  }
+
+  const state = service ? service.getState() : { status: "stopped", running: false };
+  mainWindow.webContents.send("service-status", {
+    ...state,
+    qrText: serviceConfig ? "" : "",
+  });
+}
+
+async function readQrText() {
+  if (!serviceConfig) {
+    return "";
+  }
+
+  try {
+    return await fs.readFile(path.join(serviceConfig.logRoot, "latest-qr.txt"), "utf8");
+  } catch {
+    return "";
+  }
+}
+
+async function startServiceWithSettings(settings) {
+  serviceConfig = buildServiceConfigFromSettings(settings);
+
+  if (service) {
+    await stopService();
+  }
+
+  service = new OrganizerService(serviceConfig);
+  service.on("log", (message) => pushLog(message));
+  service.on("status", async (payload) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("service-status", {
+        ...payload,
+        running: Boolean(service && service.running),
+        qrText: await readQrText(),
+      });
+    }
+  });
+
+  await service.start();
+  pushLog(`Service started for ${serviceConfig.botName}`);
+}
+
+async function stopService() {
+  if (!service) {
+    return;
+  }
+
+  await service.stop();
+  pushLog("Service stopped");
+  service.removeAllListeners();
+  service = null;
+}
+
+function createWindow() {
+  mainWindow = new BrowserWindow({
+    width: 1180,
+    height: 840,
+    minWidth: 960,
+    minHeight: 700,
+    autoHideMenuBar: true,
+    webPreferences: {
+      preload: path.join(__dirname, "preload.js"),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+
+  mainWindow.loadFile(path.join(__dirname, "index.html"));
+}
+
+ipcMain.handle("settings:load", async () => {
+  return loadSettings();
+});
+
+ipcMain.handle("settings:save", async (_event, settings) => {
+  await saveSettings(settings);
+  return { ok: true };
+});
+
+ipcMain.handle("settings:export", async (_event, settings) => {
+  const targetWindow = BrowserWindow.getFocusedWindow() || mainWindow;
+  const result = await dialog.showSaveDialog(targetWindow, {
+    title: "Simpan Template Konfigurasi",
+    defaultPath: "iris-organizer-config.json",
+    filters: [{ name: "JSON", extensions: ["json"] }],
+  });
+
+  if (result.canceled || !result.filePath) {
+    return { ok: false, canceled: true };
+  }
+
+  await fs.writeFile(result.filePath, `${JSON.stringify(settings, null, 2)}\n`, "utf8");
+  return { ok: true, filePath: result.filePath };
+});
+
+ipcMain.handle("settings:import", async () => {
+  const targetWindow = BrowserWindow.getFocusedWindow() || mainWindow;
+  const result = await dialog.showOpenDialog(targetWindow, {
+    title: "Impor Template Konfigurasi",
+    properties: ["openFile"],
+    filters: [{ name: "JSON", extensions: ["json"] }],
+  });
+
+  if (result.canceled || !result.filePaths || result.filePaths.length === 0) {
+    return { ok: false, canceled: true };
+  }
+
+  const raw = await fs.readFile(result.filePaths[0], "utf8");
+  const imported = JSON.parse(raw);
+  const merged = {
+    ...defaultSettings(),
+    ...imported,
+  };
+
+  await saveSettings(merged);
+  return {
+    ok: true,
+    settings: merged,
+    filePath: result.filePaths[0],
+  };
+});
+
+ipcMain.handle("service:start", async (_event, settings) => {
+  await saveSettings(settings);
+  await startServiceWithSettings(settings);
+  return {
+    ok: true,
+    state: service ? service.getState() : { status: "stopped", running: false },
+    qrText: await readQrText(),
+  };
+});
+
+ipcMain.handle("service:stop", async () => {
+  await stopService();
+  return { ok: true };
+});
+
+ipcMain.handle("service:state", async () => {
+  const settings = await loadSettings();
+  return {
+    settings,
+    state: service ? service.getState() : { status: "stopped", running: false },
+    qrText: await readQrText(),
+    logs: logBuffer,
+  };
+});
+
+ipcMain.handle("service:test-iris", async (_event, settings) => {
+  const cfg = buildServiceConfigFromSettings(settings);
+  const url = new URL(cfg.irisDecidePath, cfg.irisBaseUrl).toString();
+
+  const response = await axios.post(
+    url,
+    {
+      text: "tolong cari kontrak april",
+      hasMedia: false,
+      lastSearchResults: [],
+    },
+    {
+      timeout: cfg.irisTimeoutMs,
+      headers: {
+        Authorization: `Bearer ${cfg.irisApiToken}`,
+        "Content-Type": "application/json",
+      },
+    },
+  );
+
+  return {
+    ok: true,
+    response: response.data,
+  };
+});
+
+ipcMain.handle("service:open-folder", async (_event, kind) => {
+  const { shell } = require("electron");
+  const settings = await loadSettings();
+  const cfg = buildServiceConfigFromSettings(settings);
+  const targets = {
+    storage: cfg.storageRoot,
+    runtime: path.dirname(cfg.storageRoot),
+    logs: cfg.logRoot,
+  };
+
+  if (targets[kind]) {
+    await shell.openPath(targets[kind]);
+  }
+
+  return { ok: true };
+});
+
+app.whenReady().then(async () => {
+  createWindow();
+  const settings = await loadSettings();
+  serviceConfig = buildServiceConfigFromSettings(settings);
+});
+
+app.on("window-all-closed", async () => {
+  await stopService().catch(() => {});
+  if (process.platform !== "darwin") {
+    app.quit();
+  }
+});

@@ -1,0 +1,26 @@
+{
+  "name": "iris-remote-organizer-bot",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Standalone WhatsApp document organizer that stores files locally and asks IRIS remotely for natural-language intent.",
+  "main": "desktop/main.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node src/index.js",
+    "desktop": "electron .",
+    "dist:win": "electron-builder --config electron-builder.config.cjs --win portable nsis",
+    "release:package": "node scripts/prepare-release.js"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^7.0.0-rc.9",
+    "axios": "^1.9.0",
+    "dotenv": "^16.4.5",
+    "fastify": "^5.8.4",
+    "pino": "^9.9.5",
+    "qrcode-terminal": "^0.12.0"
+  },
+  "devDependencies": {
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8"
+  }
+}
