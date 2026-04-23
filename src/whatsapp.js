@@ -3,17 +3,17 @@ const fsp = require("node:fs/promises");
 const path = require("node:path");
 const pino = require("pino");
 const qrcode = require("qrcode-terminal");
-const {
-  default: makeWASocket,
-  Browsers,
-  DisconnectReason,
-  fetchLatestBaileysVersion,
-  useMultiFileAuthState,
-  downloadMediaMessage,
-  getContentType,
-} = require("@whiskeysockets/baileys");
 
 const mediaLogger = pino({ level: "silent" });
+let baileysModulePromise = null;
+
+async function getBaileys() {
+  if (!baileysModulePromise) {
+    baileysModulePromise = import("@whiskeysockets/baileys");
+  }
+
+  return baileysModulePromise;
+}
 
 function persistQr(config, qr) {
   const qrTextPath = path.join(config.logRoot, "latest-qr.txt");
@@ -59,6 +59,7 @@ function getMessageText(message) {
 }
 
 async function extractMedia(client, message) {
+  const { downloadMediaMessage, getContentType } = await getBaileys();
   const content = message.message || {};
   const contentType = getContentType(content);
   if (!contentType) return null;
@@ -86,6 +87,13 @@ async function extractMedia(client, message) {
 }
 
 async function createClient(config, hooks = {}) {
+  const {
+    default: makeWASocket,
+    Browsers,
+    DisconnectReason,
+    fetchLatestBaileysVersion,
+    useMultiFileAuthState,
+  } = await getBaileys();
   const { state, saveCreds } = await useMultiFileAuthState(config.whatsappSessionDir);
   const { version } = await fetchLatestBaileysVersion();
 
