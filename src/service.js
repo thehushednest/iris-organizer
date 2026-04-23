@@ -359,6 +359,25 @@ class OrganizerService extends EventEmitter {
     return cleaned || null;
   }
 
+  isGenericMediaSaveTitle(title) {
+    const normalized = String(title || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    if (!normalized) return true;
+
+    return /^(?:ini|file|file ini|dokumen|dokumen ini|gambar|gambar ini|foto|foto ini|image|image ini|lampiran|lampiran ini|berkas|berkas ini|video|video ini|audio|audio ini)$/i.test(
+      normalized,
+    );
+  }
+
+  mediaNameQuestion(incoming) {
+    const fileLabel = incoming.media.originalFileName || "file ini";
+    return `Baik, saya simpan. ${this.config.ownerTitle} ingin memberi nama apa untuk ${fileLabel}?`;
+  }
+
   buildResultList(results) {
     return results
       .map(
@@ -652,8 +671,14 @@ class OrganizerService extends EventEmitter {
       intentExamples: retrieveIntentExamples(payload),
     });
 
+    const requestedTitle = this.deriveTitleFromConfirmation(incoming.text) || decision.title;
+    if (this.isGenericMediaSaveTitle(requestedTitle)) {
+      await sendText(this.client, incoming.chatId, this.mediaNameQuestion({ media: pendingItem }));
+      return true;
+    }
+
     const record = await this.store.commitPendingMedia(pendingItem, {
-      title: this.deriveTitleFromConfirmation(incoming.text) || decision.title,
+      title: requestedTitle,
       category: decision.category,
       tags: decision.tags,
     });
@@ -684,8 +709,25 @@ class OrganizerService extends EventEmitter {
         messageId: incoming.messageId,
       });
 
+      const requestedTitle =
+        this.deriveTitleFromConfirmation(caption) || caption.replace(/^simpan\s*:?\s*/i, "").trim();
+      if (this.isGenericMediaSaveTitle(requestedTitle)) {
+        this.log(`[bot] Caption simpan masih generik, menunggu nama file dari user: ${staged.relativePath}`);
+        await this.store.saveConversation({
+          ...state,
+          chatId: incoming.chatId,
+          senderNumber: incoming.senderNumber,
+          pendingAction: {
+            type: "media_save_confirmation",
+            mediaItem: staged,
+          },
+        });
+        await sendText(this.client, incoming.chatId, this.mediaNameQuestion(incoming));
+        return;
+      }
+
       const record = await this.store.commitPendingMedia(staged, {
-        title: this.deriveTitleFromConfirmation(caption) || caption.replace(/^simpan\s*:?\s*/i, "").trim(),
+        title: requestedTitle,
         category: this.config.defaultCategory,
       });
 
