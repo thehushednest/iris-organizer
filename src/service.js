@@ -274,6 +274,51 @@ class OrganizerService extends EventEmitter {
     );
   }
 
+  shouldHandleSendFollowupLocally(text, lastSearchResults) {
+    if (!Array.isArray(lastSearchResults) || lastSearchResults.length === 0) {
+      return false;
+    }
+
+    const normalized = String(text || "").trim().toLowerCase();
+    if (!normalized) return false;
+
+    return (
+      /^\d+$/.test(normalized) ||
+      /^kirim(?:kan)?(?:\s+(?:nomor|no|hasil|file|dokumen))?\s+\d+$/i.test(normalized) ||
+      /^kirim(?:kan)?$/i.test(normalized) ||
+      /^(?:yang\s+)?(?:pertama|kedua|ketiga|keempat|kelima)$/i.test(normalized) ||
+      /^(?:file|dokumen|hasil)(?:\s+itu|\s+ini)?$/i.test(normalized)
+    );
+  }
+
+  looksLikeGeneralInfoRequest(text) {
+    const normalized = String(text || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    if (!normalized) return false;
+
+    const asksLocalArchive = /\b(di|dari|dalam)\s+(dokumen|file|arsip)\s+saya\b/.test(normalized) ||
+      /\b(dokumen|file|arsip)\s+(saya|lokal|tersimpan)\b/.test(normalized);
+    if (asksLocalArchive) return false;
+
+    return (
+      /\b(berita|terbaru|terkini|penelusuran web|browsing|internet|cari di web|web)\b/.test(normalized) ||
+      /\b(siapa kamu|kamu siapa|jelaskan kamu|bisa apa)\b/.test(normalized)
+    );
+  }
+
+  generalInfoFallbackReply(text) {
+    const normalized = String(text || "").toLowerCase();
+    if (/\b(siapa kamu|kamu siapa|jelaskan kamu|bisa apa)\b/i.test(normalized)) {
+      return `Saya ${this.config.botName}, bot WhatsApp organizer yang membantu ${this.config.ownerTitle} menyimpan, mencari, dan mengirim kembali dokumen lokal. Saya juga bisa meminta IRIS membantu menjawab pertanyaan umum jika server IRIS mendukungnya.`;
+    }
+
+    return "Ini tampaknya pertanyaan informasi umum atau penelusuran web. Saya tidak akan mencarinya di arsip lokal. Jika IRIS sudah mendukung browsing, IRIS bisa menjawabnya sebagai informasi umum.";
+  }
+
   deriveTitleFromConfirmation(text) {
     let cleaned = String(text || "")
       .trim();
@@ -405,6 +450,12 @@ class OrganizerService extends EventEmitter {
         botRole: "WhatsApp local document organizer executor",
         executionPolicy:
           "IRIS memilih intent terstruktur; bot lokal hanya mengeksekusi intent yang ada di supportedActions.",
+        decisionPolicy: [
+          "Follow-up numerik setelah lastSearchResults berarti send_file.",
+          "Permintaan daftar/list dokumen berarti list_documents, bukan send_file.",
+          "Berita/terbaru/terkini/penelusuran web berarti ask_general_info kecuali user menyebut dokumen saya.",
+          "Pertanyaan identitas bot seperti siapa kamu berarti ask_general_info, bukan help.",
+        ],
         storedDocumentCount: documents.length,
         canBrowseExternally: true,
         note:
@@ -446,6 +497,11 @@ class OrganizerService extends EventEmitter {
     }
 
     if (normalized.intent === "search_documents") {
+      if (this.looksLikeGeneralInfoRequest(incoming.text)) {
+        await sendText(this.client, incoming.chatId, normalized.reply || this.generalInfoFallbackReply(incoming.text));
+        return;
+      }
+
       const query = this.cleanSearchQuery(normalized.searchQuery || normalized.query || "");
       if (!query) {
         await this.handleListDocuments(incoming, state);
@@ -679,6 +735,11 @@ class OrganizerService extends EventEmitter {
     }
 
     const lastSearchResults = await this.restoreLastSearch(state);
+    if (this.shouldHandleSendFollowupLocally(text, lastSearchResults)) {
+      await this.handleSend(incoming, state, text);
+      return;
+    }
+
     const decision = await decideIntent(this.config, await this.buildIrisPayload(incoming, state, lastSearchResults));
     await this.executeDecision(incoming, state, decision);
   }

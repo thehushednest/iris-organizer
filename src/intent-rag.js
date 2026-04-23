@@ -3,6 +3,8 @@ const INTENT_GUIDANCE = [
   "Jika user meminta daftar/list dokumen, gunakan list_documents walaupun ada kata kirim/kirimkan.",
   "Gunakan send_file hanya jika user merujuk hasil terakhir, misalnya nomor, 'yang pertama', 'kirimkan', atau 'file itu'.",
   "Jika user bertanya informasi umum/terkini dan tidak menyebut arsip/dokumen saya, gunakan ask_general_info.",
+  "Kata berita, terbaru, terkini, penelusuran web, internet, browsing, atau cari di web hampir selalu berarti ask_general_info, kecuali user eksplisit menyebut dokumen/arsip/file saya.",
+  "Pertanyaan 'siapa kamu', 'jelaskan kamu', dan sapaan tentang identitas bot adalah ask_general_info, bukan help.",
   "Jika user mencari arsip lokal, gunakan search_documents dengan searchQuery yang bersih dari kata perintah.",
   "Saat pendingAction media_save_confirmation, jawaban setuju/nama file harus menjadi save_media.",
 ];
@@ -66,7 +68,7 @@ const INTENT_EXAMPLES = [
   },
   {
     id: "general-self-intro",
-    triggers: ["kamu siapa", "siapa kamu", "bisa apa", "jelaskan kamu"],
+    triggers: ["kamu siapa", "siapa kamu", "bisa apa", "jelaskan kamu", "jelaskan kamu siapa"],
     context: "User bertanya identitas/kemampuan bot.",
     userText: "hai jelaskan kamu siapa",
     decision: {
@@ -78,7 +80,18 @@ const INTENT_EXAMPLES = [
   },
   {
     id: "general-current-info",
-    triggers: ["terkini", "terbaru", "berita", "browsing", "situasi", "perang"],
+    triggers: [
+      "terkini",
+      "terbaru",
+      "berita",
+      "browsing",
+      "situasi",
+      "perang",
+      "penelusuran web",
+      "cari di web",
+      "internet",
+      "web",
+    ],
     context: "User bertanya informasi umum/terkini, bukan arsip lokal.",
     userText: "cek situasi terkini perang Iran",
     decision: { intent: "ask_general_info", reply: "<jawaban ringkas dari IRIS/tool browsing>" },

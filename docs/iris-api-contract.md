@@ -36,7 +36,11 @@ Bot organizer ini tidak memanggil Ollama langsung. Ia memanggil project IRIS And
   ],
   "localContext": {
     "storedDocumentCount": 12,
-    "canBrowseExternally": true
+    "canBrowseExternally": true,
+    "decisionPolicy": [
+      "Follow-up numerik setelah lastSearchResults berarti send_file.",
+      "Berita/terbaru/terkini/penelusuran web berarti ask_general_info kecuali user menyebut dokumen saya."
+    ]
   },
   "intentGuidance": [
     "Pilih tepat satu intent dari supportedActions.",
