@@ -16,8 +16,12 @@ class OrganizerService extends EventEmitter {
     this.client = null;
     this.httpServer = null;
     this.running = false;
+    this.stopping = false;
     this.status = "stopped";
     this.lastQr = "";
+    this.reconnectTimer = null;
+    this.reconnectAttempts = 0;
+    this.replacingClient = false;
   }
 
   helpText() {
@@ -395,38 +399,112 @@ class OrganizerService extends EventEmitter {
     await this.handleText(incoming, state);
   }
 
-  async start() {
-    if (this.running) {
+  getDisconnectStatusCode(update) {
+    return update && update.lastDisconnect && update.lastDisconnect.error && update.lastDisconnect.error.output
+      ? update.lastDisconnect.error.output.statusCode
+      : undefined;
+  }
+
+  getDisconnectMessage(update) {
+    const error = update && update.lastDisconnect ? update.lastDisconnect.error : null;
+    return error && error.message ? error.message : "unknown reason";
+  }
+
+  scheduleReconnect(update) {
+    if (this.stopping || this.replacingClient || !this.running) {
       return;
     }
 
-    this.ensureDirectories();
-    await this.store.ensureReady();
+    const statusCode = this.getDisconnectStatusCode(update);
+    if (statusCode === 401) {
+      this.log("[whatsapp] Session logged out. Hapus session dan scan QR ulang.");
+      this.setStatus("logged_out", { qrAvailable: Boolean(this.lastQr) });
+      return;
+    }
 
-    this.log(`[app] Starting ${this.config.botName}`);
-    this.log(`[app] IRIS remote brain: ${this.config.irisBaseUrl}${this.config.irisDecidePath}`);
-    this.setStatus("starting");
+    if (this.reconnectTimer) {
+      return;
+    }
 
-    this.client = await createClient(this.config, {
+    this.reconnectAttempts += 1;
+    const delayMs = Math.min(30000, 2000 * 2 ** Math.min(this.reconnectAttempts - 1, 4));
+    this.log(
+      `[whatsapp] Koneksi tertutup (${statusCode || "no-code"}: ${this.getDisconnectMessage(
+        update,
+      )}). Reconnect dalam ${Math.round(delayMs / 1000)} detik.`,
+    );
+    this.setStatus("reconnecting", { qrAvailable: Boolean(this.lastQr) });
+
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      this.reconnectWhatsApp().catch((error) => {
+        this.log(`[whatsapp] Reconnect gagal: ${error.message}`);
+        this.scheduleReconnect({});
+      });
+    }, delayMs);
+  }
+
+  async reconnectWhatsApp() {
+    if (this.stopping || !this.running) {
+      return;
+    }
+
+    this.log("[whatsapp] Mencoba menyambungkan ulang...");
+    await this.openWhatsAppClient();
+  }
+
+  async closeWhatsAppClient({ replacing = false } = {}) {
+    if (!this.client) {
+      return;
+    }
+
+    const client = this.client;
+    this.client = null;
+    this.replacingClient = replacing;
+
+    if (typeof client.end === "function") {
+      try {
+        client.end(undefined);
+      } catch {}
+    } else if (client.ws && typeof client.ws.close === "function") {
+      try {
+        client.ws.close();
+      } catch {}
+    }
+
+    setTimeout(() => {
+      if (this.replacingClient === replacing) {
+        this.replacingClient = false;
+      }
+    }, 500);
+  }
+
+  async openWhatsAppClient() {
+    await this.closeWhatsAppClient({ replacing: true });
+
+    const client = await createClient(this.config, {
       onQr: (qr) => {
         this.lastQr = qr;
+        this.log("[whatsapp] QR baru tersedia. Scan dari WhatsApp agar bot tersambung.");
         this.setStatus("waiting_for_qr", { qrAvailable: true });
       },
       onConnectionUpdate: (update) => {
         if (update.connection === "open") {
+          this.reconnectAttempts = 0;
           this.setStatus("connected", { qrAvailable: Boolean(this.lastQr) });
         } else if (update.connection === "close") {
           this.setStatus("disconnected", { qrAvailable: Boolean(this.lastQr) });
+          this.scheduleReconnect(update);
         }
       },
       onReady: () => {
+        this.reconnectAttempts = 0;
+        this.log("[whatsapp] Client connected.");
         this.setStatus("connected");
       },
     });
 
-    this.httpServer = await startHttpServer(this.config, { store: this.store, client: this.client });
-
-    this.client.ev.on("messages.upsert", (event) => {
+    client.ev.on("messages.upsert", (event) => {
       if (event.type !== "notify") {
         return;
       }
@@ -440,7 +518,26 @@ class OrganizerService extends EventEmitter {
       }
     });
 
+    this.client = client;
+  }
+
+  async start() {
+    if (this.running) {
+      return;
+    }
+
+    this.stopping = false;
+    this.ensureDirectories();
+    await this.store.ensureReady();
+
+    this.log(`[app] Starting ${this.config.botName}`);
+    this.log(`[app] IRIS remote brain: ${this.config.irisBaseUrl}${this.config.irisDecidePath}`);
+    this.setStatus("starting");
     this.running = true;
+
+    await this.openWhatsAppClient();
+
+    this.httpServer = await startHttpServer(this.config, { store: this.store, client: this.client });
     this.setStatus("running", { qrAvailable: Boolean(this.lastQr) });
   }
 
@@ -450,26 +547,22 @@ class OrganizerService extends EventEmitter {
     }
 
     this.setStatus("stopping", { qrAvailable: Boolean(this.lastQr) });
+    this.stopping = true;
+
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
 
     if (this.httpServer && typeof this.httpServer.close === "function") {
       await this.httpServer.close().catch(() => {});
     }
 
-    if (this.client) {
-      if (typeof this.client.end === "function") {
-        try {
-          this.client.end(undefined);
-        } catch {}
-      } else if (this.client.ws && typeof this.client.ws.close === "function") {
-        try {
-          this.client.ws.close();
-        } catch {}
-      }
-    }
+    await this.closeWhatsAppClient();
 
-    this.client = null;
     this.httpServer = null;
     this.running = false;
+    this.reconnectAttempts = 0;
     this.setStatus("stopped", { qrAvailable: Boolean(this.lastQr) });
   }
 
