@@ -137,6 +137,20 @@ async function startServiceWithSettings(settings) {
 
   service = new OrganizerService(serviceConfig);
   service.on("log", (message) => pushLog(message));
+  service.on("whitelist-resolved", async (payload) => {
+    const current = await loadSettings();
+    const allowedNumbers = Array.from(
+      new Set([
+        ...String(current.allowedNumbers || "")
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean),
+        ...payload.allowedNumbers,
+      ]),
+    ).join(",");
+    await saveSettings({ ...current, allowedNumbers });
+    pushLog(`[app] Whitelist tersimpan otomatis: ${allowedNumbers}`);
+  });
   service.on("status", async (payload) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send("service-status", {

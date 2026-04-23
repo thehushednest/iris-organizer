@@ -31,6 +31,31 @@ function extractSenderNumber(chatId, participant) {
     .replace(/\D/g, "");
 }
 
+function collectDigitsDeep(value, output = new Set()) {
+  if (value == null) {
+    return output;
+  }
+
+  if (typeof value === "string" || typeof value === "number") {
+    const digits = String(value).replace(/\D/g, "");
+    if (digits.length >= 5) {
+      output.add(digits);
+    }
+    return output;
+  }
+
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectDigitsDeep(item, output));
+    return output;
+  }
+
+  if (typeof value === "object") {
+    Object.values(value).forEach((item) => collectDigitsDeep(item, output));
+  }
+
+  return output;
+}
+
 function isAuthorizedNumber(senderNumber) {
   if (this.config.whatsappAllowedNumbers.length === 0) {
     return true;
@@ -174,6 +199,35 @@ async function createClient(config, hooks = {}) {
   return client;
 }
 
+async function resolveWhatsAppIds(client, numbers) {
+  if (!client || typeof client.onWhatsApp !== "function") {
+    return [];
+  }
+
+  const inputDigits = Array.from(
+    new Set(
+      (numbers || [])
+        .map((number) => String(number || "").replace(/\D/g, ""))
+        .filter(Boolean),
+    ),
+  );
+  if (inputDigits.length === 0) {
+    return [];
+  }
+
+  const jids = inputDigits.map((number) => `${number}@s.whatsapp.net`);
+  const resolved = new Set(inputDigits);
+
+  try {
+    const result = await client.onWhatsApp(...jids);
+    collectDigitsDeep(result, resolved);
+  } catch {
+    return inputDigits;
+  }
+
+  return Array.from(resolved);
+}
+
 async function sendText(client, chatId, text) {
   await client.sendMessage(chatId, { text });
 }
@@ -224,6 +278,7 @@ async function normalizeIncoming(config, client, message, hooks = {}) {
 module.exports = {
   createClient,
   normalizeIncoming,
+  resolveWhatsAppIds,
   sendText,
   sendDocument,
 };

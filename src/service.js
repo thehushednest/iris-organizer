@@ -4,7 +4,7 @@ const EventEmitter = require("node:events");
 
 const { Store } = require("./store");
 const { decideIntent } = require("./iris-client");
-const { createClient, normalizeIncoming, sendText, sendDocument } = require("./whatsapp");
+const { createClient, normalizeIncoming, resolveWhatsAppIds, sendText, sendDocument } = require("./whatsapp");
 const { startHttpServer } = require("./http");
 const { toWhatsAppJid } = require("./config");
 
@@ -529,6 +529,9 @@ class OrganizerService extends EventEmitter {
         this.reconnectAttempts = 0;
         this.log("[whatsapp] Client connected.");
         this.setStatus("connected");
+        this.resolveWhitelistAliases().catch((error) => {
+          this.log(`[app] Gagal resolve whitelist WhatsApp: ${error.message}`);
+        });
       },
     });
 
@@ -547,6 +550,29 @@ class OrganizerService extends EventEmitter {
     });
 
     this.client = client;
+  }
+
+  async resolveWhitelistAliases() {
+    if (!this.client || this.config.whatsappAllowedNumbers.length === 0) {
+      return;
+    }
+
+    const before = new Set(this.config.whatsappAllowedNumbers);
+    const resolved = await resolveWhatsAppIds(this.client, this.config.whatsappAllowedNumbers);
+    const merged = Array.from(new Set([...this.config.whatsappAllowedNumbers, ...resolved]));
+    const added = merged.filter((item) => !before.has(item));
+
+    if (added.length === 0) {
+      this.log(`[app] Whitelist WhatsApp sudah sinkron: ${merged.join(", ")}`);
+      return;
+    }
+
+    this.config.whatsappAllowedNumbers = merged;
+    this.log(`[app] Whitelist WhatsApp otomatis ditambah ID: ${added.join(", ")}`);
+    this.emit("whitelist-resolved", {
+      allowedNumbers: merged,
+      added,
+    });
   }
 
   async start() {
