@@ -242,6 +242,37 @@ class OrganizerService extends EventEmitter {
     return cleaned.replace(/^[,.:;\-\s]+|[,.:;\-\s]+$/g, "").trim();
   }
 
+  looksLikeDocumentListRequest(text) {
+    const normalized = String(text || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    if (!normalized) return false;
+
+    const mentionsDocs = /\b(dokumen|file|arsip|berkas|data|folder|storage|koleksi)\b/.test(normalized);
+    const wantsList = /\b(list|daftar|daftarnya|listnya|apa saja|apa aja|punya|tersimpan|yang ada|semua|tampilkan|lihat|cek)\b/.test(
+      normalized,
+    );
+    const directList = /\b(list|daftar)\s+(dokumen|file|arsip|berkas|data)\b/.test(normalized);
+
+    return (mentionsDocs && wantsList) || directList;
+  }
+
+  looksLikeSendReference(text) {
+    const normalized = String(text || "").trim().toLowerCase();
+    if (!normalized) return true;
+
+    return (
+      /^\d+$/.test(normalized) ||
+      /^kirim(?:kan)?\s+\d+$/i.test(normalized) ||
+      /^kirim(?:kan)?\s+(?:nomor|no|hasil|file|dokumen)\s+\d+$/i.test(normalized) ||
+      /^(?:file|dokumen|hasil)\s+\d+$/i.test(normalized) ||
+      /\b(pertama|kedua|ketiga|keempat|kelima)\b/i.test(normalized)
+    );
+  }
+
   deriveTitleFromConfirmation(text) {
     let cleaned = String(text || "")
       .trim();
@@ -418,7 +449,21 @@ class OrganizerService extends EventEmitter {
     }
 
     if (normalized.intent === "send_file") {
-      await this.handleSend(incoming, state, normalized.reference || normalized.result || incoming.text);
+      const reference = normalized.reference || normalized.result || incoming.text;
+      if (!this.looksLikeSendReference(reference)) {
+        if (this.looksLikeDocumentListRequest(incoming.text)) {
+          await this.handleListDocuments(incoming, state);
+          return;
+        }
+
+        const query = this.cleanSearchQuery(incoming.text);
+        if (query) {
+          await this.handleSearch(incoming, state, query);
+          return;
+        }
+      }
+
+      await this.handleSend(incoming, state, reference);
       return;
     }
 
@@ -460,9 +505,17 @@ class OrganizerService extends EventEmitter {
       return;
     }
 
-    const picked = this.pickSearchResult(reference, results);
+    const normalizedReference = String(reference || "").trim();
+    const picked = !normalizedReference && results.length === 1
+      ? results[0]
+      : this.pickSearchResult(normalizedReference, results);
     if (!picked) {
-      await sendText(this.client, incoming.chatId, "Saya belum bisa menentukan file mana yang dimaksud. Coba sebut nomor hasilnya.");
+      const docs = results.length;
+      await sendText(
+        this.client,
+        incoming.chatId,
+        `Saya belum bisa menentukan file mana yang dimaksud. Balas dengan nomor hasil, misalnya "kirim 1". Saat ini ada ${docs} hasil yang bisa dipilih.`,
+      );
       return;
     }
 
