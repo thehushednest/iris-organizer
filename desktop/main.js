@@ -212,7 +212,17 @@ ipcMain.handle("settings:load", async () => {
 
 ipcMain.handle("settings:save", async (_event, settings) => {
   await saveSettings(settings);
-  return { ok: true };
+  if (service) {
+    pushLog("[app] Konfigurasi baru disimpan. Bot direstart agar whitelist terbaru aktif.");
+    await startServiceWithSettings(settings);
+    await emitStatus();
+  }
+
+  return {
+    ok: true,
+    state: service ? service.getState() : { status: "stopped", running: false },
+    ...(await readQrPayload()),
+  };
 });
 
 ipcMain.handle("settings:export", async (_event, settings) => {

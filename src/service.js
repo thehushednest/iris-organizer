@@ -556,6 +556,13 @@ class OrganizerService extends EventEmitter {
 
     this.log(`[app] Starting ${this.config.botName}`);
     this.log(`[app] IRIS remote brain: ${this.config.irisBaseUrl}${this.config.irisDecidePath}`);
+    this.log(
+      `[app] WhatsApp whitelist aktif: ${
+        this.config.whatsappAllowedNumbers.length > 0
+          ? this.config.whatsappAllowedNumbers.join(", ")
+          : "semua nomor diizinkan"
+      }`,
+    );
     this.setStatus("starting");
     this.running = true;
 

@@ -147,8 +147,12 @@ async function bootstrap() {
 }
 
 document.getElementById("saveBtn").addEventListener("click", async () => {
-  await window.irisDesktop.saveSettings(collectSettings());
+  const result = await window.irisDesktop.saveSettings(collectSettings());
   appendLog("Konfigurasi berhasil disimpan.");
+  if (result && result.state) {
+    renderState(result.state);
+    renderQr(result);
+  }
 });
 
 document.getElementById("exportBtn").addEventListener("click", async () => {
