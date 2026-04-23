@@ -394,7 +394,7 @@ class OrganizerService extends EventEmitter {
       onIgnored: (event) => {
         if (event.reason === "unauthorized") {
           this.log(
-            `[bot] Pesan dari ${event.senderNumber || "nomor tidak dikenal"} diabaikan karena tidak ada di Nomor WhatsApp Diizinkan.`,
+            `[bot] Pesan dari ${event.senderNumber || "nomor tidak dikenal"} diabaikan. Tambahkan persis ID/nomor ini ke "Nomor / ID WhatsApp Diizinkan", lalu Simpan dan Jalankan Bot ulang.`,
           );
         }
       },

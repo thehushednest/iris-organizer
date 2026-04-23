@@ -44,7 +44,7 @@ Informasi yang wajib mereka isi di aplikasi:
 
 1. `IP / URL Server IRIS`
 2. `Token Internal IRIS`
-3. `Nomor WhatsApp Diizinkan`
+3. `Nomor / ID WhatsApp Diizinkan`
 4. `Port API Lokal Bot`, gunakan `8031` jika `8030` dipakai aplikasi lain
 
 Opsional:
@@ -95,6 +95,14 @@ Cek:
 
 Cek:
 
-1. nomor WhatsApp kolega sudah masuk ke `Nomor WhatsApp Diizinkan`
+1. nomor WhatsApp atau ID internal dari log sudah masuk ke `Nomor / ID WhatsApp Diizinkan`
 2. QR sudah benar-benar terscan
 3. status di aplikasi sudah running / connected
+
+Jika log menulis pesan seperti:
+
+```text
+Pesan dari 226177943912628 diabaikan
+```
+
+Masukkan persis angka `226177943912628` ke field `Nomor / ID WhatsApp Diizinkan`.
