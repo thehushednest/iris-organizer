@@ -14,8 +14,9 @@ function parseList(value) {
     return [];
   }
 
-  return String(value)
-    .split(",")
+  const items = Array.isArray(value) ? value : String(value).split(",");
+
+  return items
     .map((item) => item.trim())
     .filter(Boolean)
     .map((item) => item.toLowerCase());
@@ -31,6 +32,7 @@ function createConfig(source = {}, opts = {}) {
     whatsappSessionDir: path.resolve(cwd, source.WHATSAPP_SESSION_DIR || "./runtime/session"),
     whatsappAllowedNumbers: parseList(source.WHATSAPP_ALLOWED_NUMBERS),
     whatsappBlockedNumbers: parseList(source.WHATSAPP_BLOCKED_NUMBERS),
+    whatsappBlockedGroups: parseList(source.WHATSAPP_BLOCKED_GROUPS),
     storageRoot: path.resolve(cwd, source.STORAGE_ROOT || "./runtime/storage"),
     stateRoot: path.resolve(cwd, source.STATE_ROOT || "./runtime/state"),
     logRoot: path.resolve(cwd, source.LOG_ROOT || "./runtime/logs"),

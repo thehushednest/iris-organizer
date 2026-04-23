@@ -127,7 +127,18 @@ function matchIdentity(list, identities) {
   return null;
 }
 
-function getAccessDecision(config, identities) {
+function getAccessDecision(config, identities, options = {}) {
+  const chatId = String(options.chatId || "").toLowerCase();
+  const isGroup = Boolean(options.isGroup);
+  if (isGroup) {
+    const blockedGroups = new Set((config.whatsappBlockedGroups || []).map((item) => String(item).toLowerCase()));
+    if (blockedGroups.has(chatId)) {
+      return { allowed: false, reason: "group_blocked", matchedIdentity: chatId };
+    }
+
+    return { allowed: true, reason: "group_allowed" };
+  }
+
   const blockedMatch = matchIdentity(config.whatsappBlockedNumbers, identities);
   if (blockedMatch) {
     return { allowed: false, reason: "blocked", matchedIdentity: blockedMatch };
@@ -143,6 +154,22 @@ function getAccessDecision(config, identities) {
   }
 
   return { allowed: false, reason: "unauthorized" };
+}
+
+async function fetchParticipatingGroups(client) {
+  if (!client || typeof client.groupFetchAllParticipating !== "function") {
+    return [];
+  }
+
+  const groups = await client.groupFetchAllParticipating();
+  return Object.values(groups || {})
+    .map((group) => ({
+      id: String(group.id || "").toLowerCase(),
+      subject: group.subject || "Grup tanpa nama",
+      participantsCount: Array.isArray(group.participants) ? group.participants.length : 0,
+    }))
+    .filter((group) => group.id)
+    .sort((a, b) => a.subject.localeCompare(b.subject, "id"));
 }
 
 function normalizeText(value) {
@@ -433,7 +460,10 @@ async function normalizeIncoming(config, client, message, hooks = {}) {
   }
 
   const senderIdentities = collectKeyIdentities(message);
-  const access = getAccessDecision(config, senderIdentities);
+  const access = getAccessDecision(config, senderIdentities, {
+    chatId,
+    isGroup: groupMessage,
+  });
   if (!access.allowed) {
     if (typeof hooks.onIgnored === "function") {
       hooks.onIgnored({
@@ -474,6 +504,7 @@ async function normalizeIncoming(config, client, message, hooks = {}) {
 module.exports = {
   createClient,
   expandIdentityAliases,
+  fetchParticipatingGroups,
   normalizeIncoming,
   resolveWhatsAppIds,
   sendText,

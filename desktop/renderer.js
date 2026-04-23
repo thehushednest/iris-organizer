@@ -21,6 +21,8 @@ const logBox = document.getElementById("logBox");
 const qrStateBadge = document.getElementById("qrStateBadge");
 const connectionBadge = document.getElementById("connectionBadge");
 const refreshQrBtn = document.getElementById("refreshQrBtn");
+const groupList = document.getElementById("groupList");
+let knownGroups = [];
 
 function setBadge(element, label, tone) {
   element.textContent = label;
@@ -41,6 +43,7 @@ function collectSettings() {
     botHttpPort: fields.botHttpPort.value.trim(),
     irisTimeoutMs: fields.irisTimeoutMs.value.trim(),
     irisFallbackEnabled: fields.irisFallbackEnabled.checked,
+    blockedGroups: Array.from(groupList.querySelectorAll('input[type="checkbox"]:checked')).map((element) => element.value),
   };
 }
 
@@ -52,6 +55,33 @@ function applySettings(settings) {
       element.value = settings[key] ?? "";
     }
   });
+  renderGroups(knownGroups, settings.blockedGroups || []);
+}
+
+function renderGroups(groups = [], blockedGroups = []) {
+  knownGroups = Array.isArray(groups) ? groups : [];
+  const blocked = new Set((blockedGroups || []).map((item) => String(item).toLowerCase()));
+
+  if (knownGroups.length === 0) {
+    groupList.className = "group-list empty";
+    groupList.textContent = "Belum ada daftar grup. Sambungkan WhatsApp dulu.";
+    return;
+  }
+
+  groupList.className = "group-list";
+  groupList.innerHTML = knownGroups
+    .map(
+      (group) => `
+        <label class="group-item">
+          <input type="checkbox" value="${group.id}" ${blocked.has(String(group.id).toLowerCase()) ? "checked" : ""} />
+          <span class="group-item-text">
+            <strong>${group.subject}</strong>
+            <small>${group.id}${group.participantsCount ? ` • ${group.participantsCount} anggota` : ""}</small>
+          </span>
+        </label>
+      `,
+    )
+    .join("");
 }
 
 function appendLog(line) {
@@ -141,6 +171,7 @@ function renderState(payload) {
 async function bootstrap() {
   const snapshot = await window.irisDesktop.getState();
   applySettings(snapshot.settings);
+  renderGroups(snapshot.groups || snapshot.state?.groups || [], snapshot.settings.blockedGroups || []);
   renderState(snapshot.state);
   renderQr(snapshot);
   if (Array.isArray(snapshot.logs) && snapshot.logs.length > 0) {
@@ -236,6 +267,13 @@ window.irisDesktop.onLog((line) => {
 
 window.irisDesktop.onStatus((payload) => {
   renderState(payload);
+  if (payload && Array.isArray(payload.groups)) {
+    renderGroups(payload.groups, collectSettings().blockedGroups);
+  }
+});
+
+window.irisDesktop.onGroups((groups) => {
+  renderGroups(groups, collectSettings().blockedGroups);
 });
 
 window.addEventListener("resize", fitQrBox);

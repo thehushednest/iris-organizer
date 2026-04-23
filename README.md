@@ -185,6 +185,7 @@ Detail contract lengkap ada di `docs/iris-api-contract.md`.
 - Untuk produksi jangka panjang, sebaiknya endpoint IRIS di-protect dengan token internal dan dibatasi hanya dari IP bot.
 - Di grup WhatsApp, bot hanya merespons jika di-mention/tag.
 - File grup tanpa mention akan diabaikan.
+- Semua anggota grup boleh mention bot, tetapi grup tertentu bisa diblokir dari GUI desktop setelah WhatsApp connected.
 - Jika ingin menyimpan file yang sudah terlanjur dikirim ke grup, reply file tersebut sambil mention bot lalu beri instruksi simpan.
 
 ## Dipakai Banyak Kolega

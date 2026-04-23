@@ -14,4 +14,5 @@ contextBridge.exposeInMainWorld("irisDesktop", {
   onLog: (callback) => ipcRenderer.on("service-log", (_event, payload) => callback(payload)),
   onStatus: (callback) =>
     ipcRenderer.on("service-status", (_event, payload) => callback(payload)),
+  onGroups: (callback) => ipcRenderer.on("service-groups", (_event, payload) => callback(payload)),
 });

@@ -349,6 +349,76 @@ input:focus {
   height: 18px;
 }
 
+.group-access-card {
+  margin-top: 14px;
+  border-top: 1px solid rgba(113, 104, 90, 0.12);
+  padding-top: 14px;
+}
+
+.group-access-head h3 {
+  margin: 0;
+  font-size: 18px;
+  color: var(--ink);
+}
+
+.group-access-head p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.group-list {
+  margin-top: 12px;
+  display: grid;
+  gap: 8px;
+  max-height: 190px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.group-list.empty {
+  display: block;
+  border: 1px dashed var(--line);
+  border-radius: 16px;
+  padding: 14px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.45);
+}
+
+.group-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.65);
+  color: var(--ink);
+}
+
+.group-item input {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+}
+
+.group-item-text {
+  display: grid;
+  gap: 2px;
+}
+
+.group-item-text strong {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.group-item-text small {
+  font-size: 11px;
+  color: var(--muted);
+  word-break: break-all;
+}
+
 .columns {
   display: grid;
   grid-template-columns: minmax(420px, 0.82fr) minmax(440px, 1.18fr);

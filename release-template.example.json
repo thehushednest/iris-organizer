@@ -3,6 +3,7 @@
   "ownerTitle": "Bapak",
   "allowedNumbers": "6281234567890",
   "blockedNumbers": "",
+  "blockedGroups": [],
   "botApiToken": "ganti-token-lokal-bot",
   "botHttpPort": "8031",
   "irisBaseUrl": "https://iris.cakrawalasasmita.com",

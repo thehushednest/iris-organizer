@@ -8,6 +8,7 @@ const { INTENT_GUIDANCE, retrieveIntentExamples } = require("./intent-rag");
 const {
   createClient,
   expandIdentityAliases,
+  fetchParticipatingGroups,
   normalizeIncoming,
   resolveWhatsAppIds,
   sendText,
@@ -29,6 +30,7 @@ class OrganizerService extends EventEmitter {
     this.reconnectTimer = null;
     this.reconnectAttempts = 0;
     this.replacingClient = false;
+    this.groupCatalog = [];
   }
 
   helpText() {
@@ -226,6 +228,18 @@ class OrganizerService extends EventEmitter {
         });
       }
     }
+  }
+
+  async refreshGroupCatalog() {
+    if (!this.client) {
+      this.groupCatalog = [];
+      this.emit("groups-updated", this.groupCatalog);
+      return this.groupCatalog;
+    }
+
+    this.groupCatalog = await fetchParticipatingGroups(this.client);
+    this.emit("groups-updated", this.groupCatalog);
+    return this.groupCatalog;
   }
 
   cleanSearchQuery(text) {
@@ -868,6 +882,15 @@ class OrganizerService extends EventEmitter {
 
     const incoming = await normalizeIncoming(this.config, this.client, rawMessage, {
       onIgnored: (event) => {
+        if (event.reason === "group_blocked") {
+          this.log(`[bot] Pesan grup diabaikan karena grup ini diblokir: ${event.chatId || "-"}.`);
+          return;
+        }
+
+        if (event.reason === "group_without_mention") {
+          return;
+        }
+
         if (event.reason === "blocked") {
           this.log(
             `[bot] Pesan dari ${event.senderNumber || "nomor tidak dikenal"} diblokir oleh blacklist. Identitas: ${
@@ -1020,6 +1043,13 @@ class OrganizerService extends EventEmitter {
         this.reconnectAttempts = 0;
         this.log("[whatsapp] Client connected.");
         this.setStatus("connected");
+        this.refreshGroupCatalog()
+          .then((groups) => {
+            this.log(`[whatsapp] Daftar grup berhasil dimuat: ${groups.length} grup.`);
+          })
+          .catch((error) => {
+            this.log(`[whatsapp] Gagal memuat daftar grup: ${error.message}`);
+          });
         this.resolveWhitelistAliases().catch((error) => {
           this.log(`[app] Gagal resolve whitelist WhatsApp: ${error.message}`);
         });
@@ -1100,6 +1130,13 @@ class OrganizerService extends EventEmitter {
           : "tidak ada nomor/ID diblokir"
       }`,
     );
+    this.log(
+      `[app] Blacklist grup aktif: ${
+        this.config.whatsappBlockedGroups.length > 0
+          ? this.config.whatsappBlockedGroups.join(", ")
+          : "tidak ada grup diblokir"
+      }`,
+    );
     this.setStatus("starting");
     this.running = true;
 
@@ -1142,6 +1179,7 @@ class OrganizerService extends EventEmitter {
       qrAvailable: Boolean(this.lastQr),
       irisBaseUrl: this.config.irisBaseUrl,
       storageRoot: this.config.storageRoot,
+      groups: this.groupCatalog,
     };
   }
 }

@@ -27,6 +27,7 @@ function defaultSettings() {
     ownerTitle: "Bapak",
     allowedNumbers: "",
     blockedNumbers: "",
+    blockedGroups: [],
     botApiToken: "local-bot-token",
     botHttpPort: "8030",
     irisBaseUrl: "http://127.0.0.1:3000",
@@ -64,6 +65,7 @@ function buildServiceConfigFromSettings(settings) {
       BOT_OWNER_TITLE: settings.ownerTitle,
       WHATSAPP_ALLOWED_NUMBERS: settings.allowedNumbers,
       WHATSAPP_BLOCKED_NUMBERS: settings.blockedNumbers,
+      WHATSAPP_BLOCKED_GROUPS: settings.blockedGroups,
       WHATSAPP_SESSION_DIR: path.join(runtimeRoot, "session"),
       STORAGE_ROOT: path.join(runtimeRoot, "storage"),
       STATE_ROOT: path.join(runtimeRoot, "state"),
@@ -172,8 +174,14 @@ async function startServiceWithSettings(settings) {
       mainWindow.webContents.send("service-status", {
         ...payload,
         running: Boolean(service && service.running),
+        groups: service ? service.groupCatalog : [],
         ...(await readQrPayload()),
       });
+    }
+  });
+  service.on("groups-updated", async (groups) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("service-groups", groups);
     }
   });
 
@@ -335,6 +343,7 @@ ipcMain.handle("service:state", async () => {
   return {
     settings,
     state: service ? service.getState() : { status: "stopped", running: false },
+    groups: service ? service.groupCatalog : [],
     ...(await readQrPayload()),
     logs: logBuffer,
   };
