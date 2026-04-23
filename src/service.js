@@ -1081,11 +1081,21 @@ class OrganizerService extends EventEmitter {
     });
 
     client.ev.on("messages.upsert", (event) => {
-      if (event.type !== "notify") {
+      if (!event || !Array.isArray(event.messages) || event.messages.length === 0) {
+        return;
+      }
+
+      if (event.type !== "notify" && event.type !== "append") {
         return;
       }
 
       for (const rawMessage of event.messages) {
+        const hasContent = Boolean(rawMessage && rawMessage.message);
+        const isProtocolOnly = Boolean(rawMessage && rawMessage.messageStubType && !hasContent);
+        if (!hasContent || isProtocolOnly) {
+          continue;
+        }
+
         Promise.resolve()
           .then(() => this.processMessage(rawMessage))
           .catch((error) => {
