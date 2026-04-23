@@ -393,8 +393,12 @@ class OrganizerService extends EventEmitter {
     const incoming = await normalizeIncoming(this.config, this.client, rawMessage, {
       onIgnored: (event) => {
         if (event.reason === "unauthorized") {
+          const activeWhitelist =
+            this.config.whatsappAllowedNumbers.length > 0
+              ? this.config.whatsappAllowedNumbers.join(", ")
+              : "semua nomor diizinkan";
           this.log(
-            `[bot] Pesan dari ${event.senderNumber || "nomor tidak dikenal"} diabaikan. Tambahkan persis ID/nomor ini ke "Nomor / ID WhatsApp Diizinkan", lalu Simpan dan Jalankan Bot ulang.`,
+            `[bot] Pesan dari ${event.senderNumber || "nomor tidak dikenal"} diabaikan. Whitelist aktif: ${activeWhitelist}. Tambahkan persis ID/nomor pengirim ke "Nomor / ID WhatsApp Diizinkan", atau kosongkan field itu untuk mengizinkan semua.`,
           );
         }
       },
