@@ -18,6 +18,26 @@ Bot organizer ini tidak memanggil Ollama langsung. Ia memanggil project IRIS And
   "pendingAction": {
     "type": "media_save_confirmation"
   },
+  "supportedActions": [
+    {
+      "intent": "list_documents",
+      "description": "Tampilkan daftar dokumen lokal yang sudah tersimpan."
+    },
+    {
+      "intent": "search_documents",
+      "description": "Cari dokumen lokal berdasarkan topik, judul, kategori, tag, atau nama file.",
+      "fields": ["searchQuery"]
+    },
+    {
+      "intent": "ask_general_info",
+      "description": "Jawab pertanyaan umum atau informasi eksternal melalui IRIS, tanpa mencari file lokal.",
+      "fields": ["reply"]
+    }
+  ],
+  "localContext": {
+    "storedDocumentCount": 12,
+    "canBrowseExternally": true
+  },
   "lastSearchResults": [
     {
       "id": "doc-123",
@@ -40,6 +60,10 @@ Field penting:
   State percakapan yang sedang berjalan.
 - `lastSearchResults`
   Ringkasan hasil pencarian terakhir agar IRIS bisa memahami rujukan seperti "kirim nomor 2".
+- `supportedActions`
+  Daftar aksi aman yang bisa dieksekusi bot lokal. IRIS sebaiknya memilih salah satu intent dari daftar ini.
+- `localContext`
+  Konteks kemampuan bot lokal, jumlah dokumen tersimpan, dan pemisahan antara arsip lokal vs informasi umum.
 
 ## Response body
 
@@ -61,22 +85,37 @@ IRIS harus mengembalikan JSON dengan format berikut:
 
 - `save_text`
 - `save_media`
-- `search`
+- `list_documents`
+- `search_documents`
 - `send_file`
+- `ask_general_info`
 - `help`
 - `cancel`
 - `clarify`
-- `chat`
+
+Alias lama tetap ditoleransi oleh bot lokal:
+
+- `search` diperlakukan sebagai `search_documents`
+- `chat`, `general_info`, `web_search`, dan `browse_web` diperlakukan sebagai `ask_general_info`
+- `list`, `browse_documents`, dan `show_documents` diperlakukan sebagai `list_documents`
 
 ## Peran IRIS
 
 IRIS tidak perlu menyimpan file organizer. Semua file tetap tinggal di mesin bot.
 
-IRIS hanya bertugas:
+IRIS bertugas:
 
 1. memahami maksud user
 2. menyarankan judul file atau kategori
 3. mengubah percakapan natural menjadi keputusan intent yang terstruktur
+4. menjawab pertanyaan umum/terkini jika user tidak sedang meminta arsip lokal
+
+Bot lokal tetap menjadi executor aman:
+
+1. menyimpan file di laptop
+2. mencari arsip lokal
+3. mengirim file yang dipilih
+4. menolak aksi yang tidak ada di kontrak
 
 ## Rekomendasi implementasi di IRIS
 
@@ -85,3 +124,4 @@ IRIS hanya bertugas:
 - Tambahkan system prompt khusus organizer
 - Validasi `intent` sebelum response dikirim ke bot
 - Lindungi endpoint dengan token internal dan allowlist IP bot jika memungkinkan
+- Untuk pertanyaan informasi umum/terkini, IRIS boleh melakukan browsing/tooling di sisi IRIS lalu mengembalikan `ask_general_info` dengan `reply`.

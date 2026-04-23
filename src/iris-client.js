@@ -18,9 +18,17 @@ function heuristicDecision(text) {
     return { intent: "cancel" };
   }
 
+  if (
+    /\b(list|daftar|tampilkan|lihat|cek|cari|carikan|kirimi|kirimkan|kasih)\b/.test(normalized) &&
+    /\b(dokumen|file|arsip|berkas|data)\b/.test(normalized) &&
+    /\b(yang ada|semua|tersimpan|terbaru|terakhir|listnya|daftarnya|apa saja|apa aja)\b/.test(normalized)
+  ) {
+    return { intent: "list_documents" };
+  }
+
   if (normalized.startsWith("cari ") || normalized.startsWith("cari:") || normalized.includes("carikan")) {
     return {
-      intent: "search",
+      intent: "search_documents",
       searchQuery: text.replace(/^cari\s*:?\s*/i, "").trim(),
     };
   }
@@ -36,10 +44,9 @@ function heuristicDecision(text) {
   }
 
   return {
-    intent: "save_text",
-    title: String(text).split(/\s+/).slice(0, 6).join(" "),
-    category: "catatan",
-    reply: "Catatan ini saya simpan sebagai file teks.",
+    intent: "ask_general_info",
+    reply:
+      "IRIS sedang tidak bisa dihubungi, jadi saya belum bisa memahami bebas atau mencari informasi umum. Saya tetap bisa bantu perintah dasar seperti help, batal, cari dokumen, dan kirim hasil.",
   };
 }
 

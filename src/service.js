@@ -68,36 +68,77 @@ class OrganizerService extends EventEmitter {
     return /^(tidak|ga|gak|nggak|jangan|batal|cancel)\b/i.test(String(text).trim());
   }
 
-  normalizeIntentText(text) {
-    return String(text || "")
-      .toLowerCase()
-      .replace(/[^a-z0-9\s]/gi, " ")
-      .replace(/\s+/g, " ")
-      .trim();
+  supportedActions() {
+    return [
+      {
+        intent: "list_documents",
+        description: "Tampilkan daftar dokumen lokal yang sudah tersimpan.",
+      },
+      {
+        intent: "search_documents",
+        description: "Cari dokumen lokal berdasarkan topik, judul, kategori, tag, atau nama file.",
+        fields: ["searchQuery"],
+      },
+      {
+        intent: "send_file",
+        description: "Kirim salah satu hasil pencarian/daftar terakhir ke chat WhatsApp.",
+        fields: ["reference"],
+      },
+      {
+        intent: "save_text",
+        description: "Simpan pesan teks sebagai catatan lokal.",
+        fields: ["title", "category", "tags", "reply"],
+      },
+      {
+        intent: "save_media",
+        description: "Simpan file/media pending dengan metadata yang dipahami dari jawaban user.",
+        fields: ["title", "category", "tags"],
+      },
+      {
+        intent: "ask_general_info",
+        description: "Jawab pertanyaan umum atau informasi eksternal melalui IRIS, tanpa mencari file lokal.",
+        fields: ["reply"],
+      },
+      {
+        intent: "help",
+        description: "Tampilkan bantuan penggunaan bot.",
+      },
+      {
+        intent: "cancel",
+        description: "Batalkan proses/pending action.",
+      },
+      {
+        intent: "clarify",
+        description: "Minta klarifikasi jika maksud user belum cukup jelas.",
+        fields: ["reply"],
+      },
+    ];
   }
 
-  isListDocumentsIntent(text) {
-    const normalized = this.normalizeIntentText(text);
-    if (!normalized) return false;
+  normalizeDecision(decision) {
+    const normalized = {
+      ...(decision || {}),
+      intent: String((decision && decision.intent) || "clarify").trim().toLowerCase(),
+    };
 
-    const mentionsDocuments = /\b(dokumen|dokumeny|file|arsip|berkas|data|folder|storage|koleksi)\b/i.test(
-      normalized,
-    );
-    const asksForList = /\b(list|listnya|daftar|daftarnya|tampilkan|lihat|cek|cari|carikan|kirimi|kirimkan|kasih|apa saja|apa aja)\b/i.test(
-      normalized,
-    );
-    const broadScope = /\b(yang ada|semua|tersimpan|terbaru|terakhir|punya|koleksi|arsipku|fileku|dokumenku)\b/i.test(
-      normalized,
-    );
+    const aliases = {
+      list: "list_documents",
+      browse_documents: "list_documents",
+      show_documents: "list_documents",
+      search: "search_documents",
+      find_document: "search_documents",
+      find_documents: "search_documents",
+      search_document: "search_documents",
+      save_note: "save_text",
+      note: "save_text",
+      general_info: "ask_general_info",
+      web_search: "ask_general_info",
+      browse_web: "ask_general_info",
+      chat: "ask_general_info",
+    };
 
-    return (
-      (mentionsDocuments && asksForList && broadScope) ||
-      /\b(list|daftar)\s+(dokumen|dokumeny|file|arsip|berkas|data)\b/i.test(normalized) ||
-      /\b(dokumen|dokumeny|file|arsip|berkas|data)\s+(apa saja|apa aja|yang ada|tersimpan|terbaru|terakhir)\b/i.test(
-        normalized,
-      ) ||
-      /\b(kirim|kirimi|kirimkan|kasih)\s+(list|listnya|daftar|daftarnya)\b/i.test(normalized)
-    );
+    normalized.intent = aliases[normalized.intent] || normalized.intent;
+    return normalized;
   }
 
   cleanSearchQuery(text) {
@@ -236,6 +277,93 @@ class OrganizerService extends EventEmitter {
     );
   }
 
+  async buildIrisPayload(incoming, state, lastSearchResults) {
+    const documents = await this.store.listDocuments();
+    return {
+      text: incoming.text,
+      hasMedia: Boolean(incoming.media),
+      pendingAction: state.pendingAction || null,
+      supportedActions: this.supportedActions(),
+      localContext: {
+        botRole: "WhatsApp local document organizer executor",
+        executionPolicy:
+          "IRIS memilih intent terstruktur; bot lokal hanya mengeksekusi intent yang ada di supportedActions.",
+        storedDocumentCount: documents.length,
+        canBrowseExternally: true,
+        note:
+          "Untuk pertanyaan informasi umum/terkini, gunakan ask_general_info dan isi reply. Untuk arsip lokal, gunakan list_documents/search_documents/send_file.",
+      },
+      lastSearchResults: lastSearchResults.map((item, index) => ({
+        number: index + 1,
+        id: item.record.id,
+        title: item.record.title,
+        category: item.record.category,
+        fileName: item.record.originalFileName || path.basename(item.record.relativePath),
+      })),
+    };
+  }
+
+  async executeDecision(incoming, state, decision) {
+    const normalized = this.normalizeDecision(decision);
+
+    if (normalized.intent === "help") {
+      await sendText(this.client, incoming.chatId, this.helpText());
+      return;
+    }
+
+    if (normalized.intent === "cancel") {
+      await this.store.clearPending(incoming.chatId);
+      await sendText(this.client, incoming.chatId, "Baik, saya hentikan dulu prosesnya.");
+      return;
+    }
+
+    if (normalized.intent === "list_documents") {
+      await this.handleListDocuments(incoming, state);
+      return;
+    }
+
+    if (normalized.intent === "search_documents") {
+      const query = this.cleanSearchQuery(normalized.searchQuery || normalized.query || "");
+      if (!query) {
+        await this.handleListDocuments(incoming, state);
+        return;
+      }
+      await this.handleSearch(incoming, state, query);
+      return;
+    }
+
+    if (normalized.intent === "send_file") {
+      await this.handleSend(incoming, state, normalized.reference || normalized.result || incoming.text);
+      return;
+    }
+
+    if (normalized.intent === "ask_general_info" || normalized.intent === "clarify") {
+      await sendText(
+        this.client,
+        incoming.chatId,
+        normalized.reply ||
+          `Saya belum cukup yakin maksudnya. ${this.config.ownerTitle} bisa minta saya cari arsip lokal, kirim file, simpan catatan, atau bertanya informasi umum.`,
+      );
+      return;
+    }
+
+    const record = await this.store.saveTextNote({
+      chatId: incoming.chatId,
+      senderNumber: incoming.senderNumber,
+      text: incoming.text,
+      title: normalized.title,
+      category: normalized.category,
+      tags: normalized.tags,
+      messageId: incoming.messageId,
+    });
+
+    await sendText(
+      this.client,
+      incoming.chatId,
+      normalized.reply || `Catatan sudah saya simpan sebagai "${record.title}" di folder ${record.relativePath}.`,
+    );
+  }
+
   async handleSend(incoming, state, reference) {
     const results = await this.restoreLastSearch(state);
     if (results.length === 0) {
@@ -285,6 +413,13 @@ class OrganizerService extends EventEmitter {
       text: incoming.text,
       hasMedia: true,
       mode: "pending_media_confirmation",
+      pendingAction: state.pendingAction || null,
+      supportedActions: this.supportedActions(),
+      localContext: {
+        botRole: "WhatsApp local document organizer executor",
+        executionPolicy:
+          "IRIS memilih metadata/intent; bot lokal menyimpan file pending hanya jika user mengonfirmasi.",
+      },
     });
 
     const record = await this.store.commitPendingMedia(pendingItem, {
@@ -392,111 +527,9 @@ class OrganizerService extends EventEmitter {
       return;
     }
 
-    if (this.isListDocumentsIntent(text)) {
-      await this.handleListDocuments(incoming, state);
-      return;
-    }
-
-    if (/^(cari|carikan|cek|lihat|tampilkan|temukan)\b\s*:?\s*/i.test(text)) {
-      const query = this.cleanSearchQuery(text);
-      if (!query) {
-        await this.handleListDocuments(incoming, state);
-        return;
-      }
-      await this.handleSearch(incoming, state, query);
-      return;
-    }
-
-    if (/^kirim\s*:?\s*/i.test(text)) {
-      await this.handleSend(incoming, state, text.replace(/^kirim\s*:?\s*/i, "").trim());
-      return;
-    }
-
-    if (/^(kirim(?:kan)?(?:\s+(?:ke\s+sini|sini|file(?:nya)?|dokumen(?:nya)?|hasil(?:nya)?))?)$/i.test(text)) {
-      await this.handleSend(incoming, state, "");
-      return;
-    }
-
-    if (/^catat\s*:?\s*/i.test(text)) {
-      const content = text.replace(/^catat\s*:?\s*/i, "").trim();
-      const record = await this.store.saveTextNote({
-        chatId: incoming.chatId,
-        senderNumber: incoming.senderNumber,
-        text: content,
-        category: "catatan",
-        messageId: incoming.messageId,
-      });
-      await sendText(
-        this.client,
-        incoming.chatId,
-        `Catatan sudah saya simpan sebagai "${record.title}" di folder ${record.relativePath}.`,
-      );
-      return;
-    }
-
     const lastSearchResults = await this.restoreLastSearch(state);
-    const decision = await decideIntent(this.config, {
-      text,
-      hasMedia: false,
-      pendingAction: state.pendingAction || null,
-      lastSearchResults: lastSearchResults.map((item) => ({
-        id: item.record.id,
-        title: item.record.title,
-        category: item.record.category,
-      })),
-    });
-
-    if (decision.intent === "help") {
-      await sendText(this.client, incoming.chatId, this.helpText());
-      return;
-    }
-
-    if (decision.intent === "cancel") {
-      await this.store.clearPending(incoming.chatId);
-      await sendText(this.client, incoming.chatId, "Baik, saya hentikan dulu prosesnya.");
-      return;
-    }
-
-    if (decision.intent === "search") {
-      const query = this.cleanSearchQuery(decision.searchQuery || text);
-      if (!query || this.isListDocumentsIntent(text)) {
-        await this.handleListDocuments(incoming, state);
-        return;
-      }
-      await this.handleSearch(incoming, state, query);
-      return;
-    }
-
-    if (decision.intent === "send_file") {
-      await this.handleSend(incoming, state, decision.reference || text);
-      return;
-    }
-
-    if (decision.intent === "chat" || decision.intent === "clarify") {
-      await sendText(
-        this.client,
-        incoming.chatId,
-        decision.reply ||
-          `Siap. Kalau ${this.config.ownerTitle} mau, saya bisa simpan pesan ini sebagai catatan atau bantu carikan dokumen.`,
-      );
-      return;
-    }
-
-    const record = await this.store.saveTextNote({
-      chatId: incoming.chatId,
-      senderNumber: incoming.senderNumber,
-      text,
-      title: decision.title,
-      category: decision.category,
-      tags: decision.tags,
-      messageId: incoming.messageId,
-    });
-
-    await sendText(
-      this.client,
-      incoming.chatId,
-      decision.reply || `Catatan sudah saya simpan sebagai "${record.title}" di folder ${record.relativePath}.`,
-    );
+    const decision = await decideIntent(this.config, await this.buildIrisPayload(incoming, state, lastSearchResults));
+    await this.executeDecision(incoming, state, decision);
   }
 
   async processMessage(rawMessage) {

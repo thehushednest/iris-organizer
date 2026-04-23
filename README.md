@@ -165,11 +165,13 @@ Response contoh:
 
 ```json
 {
-  "intent": "search",
+  "intent": "search_documents",
   "reply": "Baik, saya carikan dulu.",
   "searchQuery": "kontrak april"
 }
 ```
+
+Bot mengirim `supportedActions` ke IRIS di setiap request. IRIS sebaiknya memilih salah satu aksi aman tersebut, misalnya `list_documents`, `search_documents`, `send_file`, `save_text`, `ask_general_info`, `help`, `cancel`, atau `clarify`.
 
 Detail contract lengkap ada di `docs/iris-api-contract.md`.
 
