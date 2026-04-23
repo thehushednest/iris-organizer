@@ -162,6 +162,28 @@ async function stopService() {
   service = null;
 }
 
+async function clearQrFiles(config) {
+  if (!config) {
+    return;
+  }
+
+  await Promise.all([
+    fs.rm(path.join(config.logRoot, "latest-qr.txt"), { force: true }).catch(() => {}),
+    fs.rm(path.join(config.logRoot, "latest-qr.raw.txt"), { force: true }).catch(() => {}),
+  ]);
+}
+
+async function resetWhatsAppSession(config) {
+  if (!config) {
+    return;
+  }
+
+  await Promise.all([
+    fs.rm(config.whatsappSessionDir, { recursive: true, force: true }).catch(() => {}),
+    clearQrFiles(config),
+  ]);
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
@@ -249,6 +271,23 @@ ipcMain.handle("service:start", async (_event, settings) => {
 ipcMain.handle("service:stop", async () => {
   await stopService();
   return { ok: true };
+});
+
+ipcMain.handle("service:refresh-qr", async (_event, settings) => {
+  await saveSettings(settings);
+  const cfg = buildServiceConfigFromSettings(settings);
+
+  pushLog("[whatsapp] Refresh QR diminta. Session lokal akan direset dan perlu scan ulang.");
+  await stopService();
+  await resetWhatsAppSession(cfg);
+  await startServiceWithSettings(settings);
+  await emitStatus();
+
+  return {
+    ok: true,
+    state: service ? service.getState() : { status: "stopped", running: false },
+    ...(await readQrPayload()),
+  };
 });
 
 ipcMain.handle("service:state", async () => {

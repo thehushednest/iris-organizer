@@ -19,6 +19,7 @@ const qrImage = document.getElementById("qrImage");
 const logBox = document.getElementById("logBox");
 const qrStateBadge = document.getElementById("qrStateBadge");
 const connectionBadge = document.getElementById("connectionBadge");
+const refreshQrBtn = document.getElementById("refreshQrBtn");
 
 function setBadge(element, label, tone) {
   element.textContent = label;
@@ -194,6 +195,21 @@ document.getElementById("startBtn").addEventListener("click", async () => {
 document.getElementById("stopBtn").addEventListener("click", async () => {
   await window.irisDesktop.stopService();
   appendLog("Perintah stop dikirim.");
+});
+
+refreshQrBtn.addEventListener("click", async () => {
+  refreshQrBtn.disabled = true;
+  appendLog("Meminta QR WhatsApp baru...");
+  try {
+    const result = await window.irisDesktop.refreshQr(collectSettings());
+    renderState(result.state);
+    renderQr(result);
+  } catch (error) {
+    appendLog(`Gagal refresh QR WhatsApp: ${error.message}`);
+    setBadge(qrStateBadge, "QR Error", "error");
+  } finally {
+    refreshQrBtn.disabled = false;
+  }
 });
 
 document.getElementById("openStorageBtn").addEventListener("click", () => {

@@ -114,7 +114,18 @@
                 <h2>QR WhatsApp</h2>
                 <p>Scan QR ini dengan WhatsApp milik kolega yang akan dipakai bot.</p>
               </div>
-              <div id="qrStateBadge" class="state-badge idle">Belum Ada QR</div>
+              <div class="qr-actions">
+                <button
+                  id="refreshQrBtn"
+                  class="icon-btn"
+                  type="button"
+                  title="Refresh QR WhatsApp"
+                  aria-label="Refresh QR WhatsApp"
+                >
+                  ↻
+                </button>
+                <div id="qrStateBadge" class="state-badge idle">Belum Ada QR</div>
+              </div>
             </div>
             <div class="qr-frame">
               <img id="qrImage" class="qr-image" alt="QR WhatsApp" />

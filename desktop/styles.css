@@ -226,6 +226,12 @@ body {
   color: var(--danger);
 }
 
+.qr-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .button-row {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
@@ -270,6 +276,26 @@ button:hover {
   color: #fff;
   border: 1px solid rgba(255, 255, 255, 0.14);
   box-shadow: none;
+}
+
+.icon-btn {
+  min-width: 34px;
+  min-height: 34px;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 999px;
+  display: inline-grid;
+  place-items: center;
+  background: #eee6da;
+  color: var(--accent-strong);
+  font-size: 18px;
+  line-height: 1;
+  box-shadow: none;
+}
+
+.icon-btn:hover {
+  transform: rotate(22deg);
 }
 
 .form-grid {

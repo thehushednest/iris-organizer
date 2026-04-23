@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld("irisDesktop", {
   importSettings: () => ipcRenderer.invoke("settings:import"),
   startService: (settings) => ipcRenderer.invoke("service:start", settings),
   stopService: () => ipcRenderer.invoke("service:stop"),
+  refreshQr: (settings) => ipcRenderer.invoke("service:refresh-qr", settings),
   getState: () => ipcRenderer.invoke("service:state"),
   testIris: (settings) => ipcRenderer.invoke("service:test-iris", settings),
   openFolder: (kind) => ipcRenderer.invoke("service:open-folder", kind),
