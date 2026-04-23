@@ -378,6 +378,36 @@ class OrganizerService extends EventEmitter {
     return `Baik, saya simpan. ${this.config.ownerTitle} ingin memberi nama apa untuk ${fileLabel}?`;
   }
 
+  wantsToSaveMedia(text) {
+    return /\bsimpan\b/i.test(String(text || ""));
+  }
+
+  async stageMediaForNaming(incoming, state, media, logLabel = "File distage sementara") {
+    const staged = await this.store.stageMedia({
+      chatId: incoming.chatId,
+      senderNumber: incoming.senderNumber,
+      mimeType: media.mimeType,
+      originalFileName: media.originalFileName,
+      caption: media.caption,
+      buffer: media.buffer,
+      messageId: incoming.messageId,
+    });
+    this.log(`[bot] ${logLabel}: ${staged.relativePath}`);
+
+    await this.store.saveConversation({
+      ...state,
+      chatId: incoming.chatId,
+      senderNumber: incoming.senderNumber,
+      pendingAction: {
+        type: "media_save_confirmation",
+        mediaItem: staged,
+      },
+    });
+
+    await sendText(this.client, incoming.chatId, this.mediaNameQuestion({ media }));
+    return true;
+  }
+
   buildResultList(results) {
     return results
       .map(
@@ -740,32 +770,46 @@ class OrganizerService extends EventEmitter {
       return;
     }
 
+    await this.stageMediaForNaming(incoming, state, incoming.media);
+  }
+
+  async handleQuotedMediaSave(incoming, state) {
+    if (!incoming.quotedMedia) {
+      await sendText(
+        this.client,
+        incoming.chatId,
+        "Saya belum menemukan file pada pesan yang direply. Coba reply langsung ke gambar atau dokumennya sambil tag saya.",
+      );
+      return true;
+    }
+
+    const requestedTitle = this.deriveTitleFromConfirmation(incoming.text);
+    if (!requestedTitle || this.isGenericMediaSaveTitle(requestedTitle)) {
+      await this.stageMediaForNaming(incoming, state, incoming.quotedMedia, "File reply distage sementara");
+      return true;
+    }
+
     const staged = await this.store.stageMedia({
       chatId: incoming.chatId,
       senderNumber: incoming.senderNumber,
-      mimeType: incoming.media.mimeType,
-      originalFileName: incoming.media.originalFileName,
-      caption: incoming.media.caption,
-      buffer: incoming.media.buffer,
+      mimeType: incoming.quotedMedia.mimeType,
+      originalFileName: incoming.quotedMedia.originalFileName,
+      caption: incoming.quotedMedia.caption,
+      buffer: incoming.quotedMedia.buffer,
       messageId: incoming.messageId,
     });
-    this.log(`[bot] File distage sementara: ${staged.relativePath}`);
-
-    await this.store.saveConversation({
-      ...state,
-      chatId: incoming.chatId,
-      senderNumber: incoming.senderNumber,
-      pendingAction: {
-        type: "media_save_confirmation",
-        mediaItem: staged,
-      },
+    const record = await this.store.commitPendingMedia(staged, {
+      title: requestedTitle,
+      category: this.config.defaultCategory,
     });
 
+    this.log(`[bot] File reply disimpan: ${record.relativePath}`);
     await sendText(
       this.client,
       incoming.chatId,
-      `Apakah ${this.config.ownerTitle} ingin saya simpan ${incoming.media.originalFileName || "file ini"}? Kalau ya, balas dengan nama file yang diinginkan. Kalau tidak, balas "batal".`,
+      `File reply sudah saya simpan sebagai "${record.title}" di folder ${record.relativePath}.`,
     );
+    return true;
   }
 
   async handleText(incoming, state) {
@@ -777,6 +821,13 @@ class OrganizerService extends EventEmitter {
     if (/^help$/i.test(text)) {
       await sendText(this.client, incoming.chatId, this.helpText());
       return;
+    }
+
+    if (incoming.isGroup && incoming.mentionsBot && incoming.quotedMedia && this.wantsToSaveMedia(text)) {
+      const handledQuotedMedia = await this.handleQuotedMediaSave(incoming, state);
+      if (handledQuotedMedia) {
+        return;
+      }
     }
 
     if (state.pendingAction && state.pendingAction.type === "media_save_confirmation") {

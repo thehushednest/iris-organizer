@@ -183,6 +183,9 @@ Detail contract lengkap ada di `docs/iris-api-contract.md`.
 - Project ini sengaja dibuat terpisah supaya tidak mengganggu bot WhatsApp lain atau app lain di workspace.
 - Kalau koneksi ke IRIS terputus, bot bisa fallback ke heuristic sederhana jika `IRIS_FALLBACK_ENABLED=true`.
 - Untuk produksi jangka panjang, sebaiknya endpoint IRIS di-protect dengan token internal dan dibatasi hanya dari IP bot.
+- Di grup WhatsApp, bot hanya merespons jika di-mention/tag.
+- File grup tanpa mention akan diabaikan.
+- Jika ingin menyimpan file yang sudah terlanjur dikirim ke grup, reply file tersebut sambil mention bot lalu beri instruksi simpan.
 
 ## Dipakai Banyak Kolega
 

@@ -194,6 +194,78 @@ function getMessageText(message) {
   );
 }
 
+function getContextInfo(message) {
+  const content = unwrapMessageContent(message.message || {});
+
+  return (
+    (content.extendedTextMessage && content.extendedTextMessage.contextInfo) ||
+    (content.imageMessage && content.imageMessage.contextInfo) ||
+    (content.videoMessage && content.videoMessage.contextInfo) ||
+    (content.documentMessage && content.documentMessage.contextInfo) ||
+    (content.audioMessage && content.audioMessage.contextInfo) ||
+    (content.buttonsResponseMessage && content.buttonsResponseMessage.contextInfo) ||
+    (content.templateButtonReplyMessage && content.templateButtonReplyMessage.contextInfo) ||
+    {}
+  );
+}
+
+function isGroupJid(jid) {
+  return /@g\.us$/i.test(String(jid || ""));
+}
+
+function getOwnIdentityAliases(client) {
+  const userId = client && client.user ? client.user.id : "";
+  return buildIdentitySet([userId]);
+}
+
+function hasBotMention(client, message) {
+  const contextInfo = getContextInfo(message);
+  const mentioned = Array.isArray(contextInfo.mentionedJid) ? contextInfo.mentionedJid : [];
+  if (mentioned.length === 0) {
+    return false;
+  }
+
+  const selfAliases = getOwnIdentityAliases(client);
+  return mentioned.some((jid) => expandIdentityAliases(jid).some((alias) => selfAliases.has(alias)));
+}
+
+async function downloadMediaFromContent(content) {
+  const { downloadContentFromMessage, getContentType } = await getBaileys();
+  const unwrapped = unwrapMessageContent(content || {});
+  const contentType = getContentType(unwrapped);
+  if (!contentType) return null;
+
+  const mediaMessage =
+    unwrapped.imageMessage || unwrapped.videoMessage || unwrapped.documentMessage || unwrapped.audioMessage;
+  if (!mediaMessage) return null;
+
+  const mediaTypeMap = {
+    imageMessage: "image",
+    videoMessage: "video",
+    documentMessage: "document",
+    audioMessage: "audio",
+  };
+  const mediaType = mediaTypeMap[contentType];
+  if (!mediaType) return null;
+
+  const stream = await downloadContentFromMessage(mediaMessage, mediaType);
+  const chunks = [];
+  for await (const chunk of stream) {
+    chunks.push(chunk);
+  }
+
+  return {
+    buffer: Buffer.concat(chunks),
+    mimeType: mediaMessage.mimetype || "application/octet-stream",
+    originalFileName: typeof mediaMessage.fileName === "string" ? mediaMessage.fileName : null,
+    caption: normalizeText(
+      mediaMessage.caption ||
+        (unwrapped.documentMessage && unwrapped.documentMessage.caption) ||
+        "",
+    ) || null,
+  };
+}
+
 async function extractMedia(client, message) {
   const { downloadMediaMessage, getContentType } = await getBaileys();
   const content = unwrapMessageContent(message.message || {});
@@ -347,6 +419,19 @@ async function normalizeIncoming(config, client, message, hooks = {}) {
   }
 
   const senderNumber = extractSenderNumber(chatId, message.key && message.key.participant);
+  const groupMessage = isGroupJid(chatId);
+  const mentionsBot = hasBotMention(client, message);
+  if (groupMessage && !mentionsBot) {
+    if (typeof hooks.onIgnored === "function") {
+      hooks.onIgnored({
+        reason: "group_without_mention",
+        chatId,
+        senderNumber,
+      });
+    }
+    return null;
+  }
+
   const senderIdentities = collectKeyIdentities(message);
   const access = getAccessDecision(config, senderIdentities);
   if (!access.allowed) {
@@ -362,13 +447,27 @@ async function normalizeIncoming(config, client, message, hooks = {}) {
     return null;
   }
 
+  const contextInfo = getContextInfo(message);
+  const quotedMedia =
+    contextInfo && contextInfo.quotedMessage
+      ? await downloadMediaFromContent(contextInfo.quotedMessage).catch(() => null)
+      : null;
+
   return {
     chatId,
     senderNumber,
     senderIdentities: Array.from(senderIdentities),
+    isGroup: groupMessage,
+    mentionsBot,
     messageId: message.key && message.key.id,
     text: getMessageText(message),
     media: await extractMedia(client, message),
+    quotedMedia,
+    quotedText: normalizeText(
+      contextInfo && contextInfo.quotedMessage
+        ? getMessageText({ message: contextInfo.quotedMessage })
+        : "",
+    ),
   };
 }
 
