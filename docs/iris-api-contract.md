@@ -39,7 +39,8 @@ Bot organizer ini tidak memanggil Ollama langsung. Ia memanggil project IRIS And
     "canBrowseExternally": true,
     "decisionPolicy": [
       "Follow-up numerik setelah lastSearchResults berarti send_file.",
-      "Berita/terbaru/terkini/penelusuran web berarti ask_general_info kecuali user menyebut dokumen saya."
+      "Berita/terbaru/terkini/penelusuran web berarti ask_general_info kecuali user menyebut dokumen saya.",
+      "Status proses boleh dikirim untuk penelusuran web, tetapi gunakan bahasa natural dan sertakan ringkasan jika hasil sudah tersedia."
     ]
   },
   "intentGuidance": [

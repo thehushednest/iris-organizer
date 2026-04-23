@@ -104,8 +104,9 @@ class OrganizerService extends EventEmitter {
       },
       {
         intent: "ask_general_info",
-        description: "Jawab pertanyaan umum atau informasi eksternal melalui IRIS, tanpa mencari file lokal.",
-        fields: ["reply"],
+        description:
+          "Jawab pertanyaan umum atau informasi eksternal melalui IRIS, tanpa mencari file lokal. Reply boleh berupa status proses natural atau jawaban final.",
+        fields: ["reply", "sources"],
       },
       {
         intent: "help",
@@ -313,10 +314,29 @@ class OrganizerService extends EventEmitter {
   generalInfoFallbackReply(text) {
     const normalized = String(text || "").toLowerCase();
     if (/\b(siapa kamu|kamu siapa|jelaskan kamu|bisa apa)\b/i.test(normalized)) {
-      return `Saya ${this.config.botName}, bot WhatsApp organizer yang membantu ${this.config.ownerTitle} menyimpan, mencari, dan mengirim kembali dokumen lokal. Saya juga bisa meminta IRIS membantu menjawab pertanyaan umum jika server IRIS mendukungnya.`;
+      return `Saya ${this.config.botName}. Tugas saya membantu ${this.config.ownerTitle} menyimpan dokumen, mencari arsip lokal, dan mengirimkan file yang dibutuhkan lewat WhatsApp.`;
     }
 
-    return "Ini tampaknya pertanyaan informasi umum atau penelusuran web. Saya tidak akan mencarinya di arsip lokal. Jika IRIS sudah mendukung browsing, IRIS bisa menjawabnya sebagai informasi umum.";
+    return "Saya cek web dulu ya. Saya belum menerima ringkasan hasil dari IRIS, jadi untuk sekarang saya baru bisa kasih kabar prosesnya.";
+  }
+
+  isProcessOnlyGeneralInfoReply(reply) {
+    const normalized = String(reply || "").toLowerCase();
+    if (!normalized.trim()) return true;
+
+    return (
+      /\b(sedang|akan|mencoba|mulai)\s+(melakukan\s+)?(pencarian|penelusuran|browsing|mencari)\b/.test(normalized) ||
+      /\b(saya\s+)?akan\s+(cari|mencari|telusuri|menelusuri)\b/.test(normalized) ||
+      /\b(informasi yang anda butuhkan|mohon tunggu|sebentar)\b/.test(normalized)
+    );
+  }
+
+  formatGeneralInfoReply(incoming, normalized) {
+    if (this.isProcessOnlyGeneralInfoReply(normalized.reply)) {
+      return this.generalInfoFallbackReply(incoming.text);
+    }
+
+    return normalized.reply || this.generalInfoFallbackReply(incoming.text);
   }
 
   deriveTitleFromConfirmation(text) {
@@ -454,6 +474,7 @@ class OrganizerService extends EventEmitter {
           "Follow-up numerik setelah lastSearchResults berarti send_file.",
           "Permintaan daftar/list dokumen berarti list_documents, bukan send_file.",
           "Berita/terbaru/terkini/penelusuran web berarti ask_general_info kecuali user menyebut dokumen saya.",
+          "Untuk ask_general_info, status proses boleh dikirim dengan bahasa natural. Jika hasil tersedia, sertakan ringkasan final.",
           "Pertanyaan identitas bot seperti siapa kamu berarti ask_general_info, bukan help.",
         ],
         storedDocumentCount: documents.length,
@@ -498,7 +519,7 @@ class OrganizerService extends EventEmitter {
 
     if (normalized.intent === "search_documents") {
       if (this.looksLikeGeneralInfoRequest(incoming.text)) {
-        await sendText(this.client, incoming.chatId, normalized.reply || this.generalInfoFallbackReply(incoming.text));
+        await sendText(this.client, incoming.chatId, this.formatGeneralInfoReply(incoming, normalized));
         return;
       }
 
@@ -534,8 +555,10 @@ class OrganizerService extends EventEmitter {
       await sendText(
         this.client,
         incoming.chatId,
-        normalized.reply ||
-          `Saya belum cukup yakin maksudnya. ${this.config.ownerTitle} bisa minta saya cari arsip lokal, kirim file, simpan catatan, atau bertanya informasi umum.`,
+        normalized.intent === "ask_general_info"
+          ? this.formatGeneralInfoReply(incoming, normalized)
+          : normalized.reply ||
+              `Saya belum cukup yakin maksudnya. ${this.config.ownerTitle} bisa minta saya cari arsip lokal, kirim file, simpan catatan, atau bertanya informasi umum.`,
       );
       return;
     }
