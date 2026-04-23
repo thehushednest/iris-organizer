@@ -4,6 +4,7 @@ const EventEmitter = require("node:events");
 
 const { Store } = require("./store");
 const { decideIntent } = require("./iris-client");
+const { INTENT_GUIDANCE, retrieveIntentExamples } = require("./intent-rag");
 const {
   createClient,
   expandIdentityAliases,
@@ -395,7 +396,7 @@ class OrganizerService extends EventEmitter {
 
   async buildIrisPayload(incoming, state, lastSearchResults) {
     const documents = await this.store.listDocuments();
-    return {
+    const payload = {
       text: incoming.text,
       hasMedia: Boolean(incoming.media),
       pendingAction: state.pendingAction || null,
@@ -416,6 +417,12 @@ class OrganizerService extends EventEmitter {
         category: item.record.category,
         fileName: item.record.originalFileName || path.basename(item.record.relativePath),
       })),
+    };
+
+    return {
+      ...payload,
+      intentGuidance: INTENT_GUIDANCE,
+      intentExamples: retrieveIntentExamples(payload),
     };
   }
 
@@ -547,7 +554,7 @@ class OrganizerService extends EventEmitter {
       return true;
     }
 
-    const decision = await decideIntent(this.config, {
+    const payload = {
       text: incoming.text,
       hasMedia: true,
       mode: "pending_media_confirmation",
@@ -558,6 +565,12 @@ class OrganizerService extends EventEmitter {
         executionPolicy:
           "IRIS memilih metadata/intent; bot lokal menyimpan file pending hanya jika user mengonfirmasi.",
       },
+    };
+
+    const decision = await decideIntent(this.config, {
+      ...payload,
+      intentGuidance: INTENT_GUIDANCE,
+      intentExamples: retrieveIntentExamples(payload),
     });
 
     const record = await this.store.commitPendingMedia(pendingItem, {

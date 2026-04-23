@@ -38,6 +38,21 @@ Bot organizer ini tidak memanggil Ollama langsung. Ia memanggil project IRIS And
     "storedDocumentCount": 12,
     "canBrowseExternally": true
   },
+  "intentGuidance": [
+    "Pilih tepat satu intent dari supportedActions.",
+    "Jika user meminta daftar/list dokumen, gunakan list_documents walaupun ada kata kirim/kirimkan."
+  ],
+  "intentExamples": [
+    {
+      "id": "send-list-not-file",
+      "context": "Kata kirim digunakan untuk meminta daftar, bukan mengirim file.",
+      "userText": "coba kirim list dokumen yang saya punya",
+      "decision": {
+        "intent": "list_documents"
+      },
+      "note": "Jangan pilih send_file jika object yang dikirim adalah list/daftar."
+    }
+  ],
   "lastSearchResults": [
     {
       "id": "doc-123",
@@ -64,6 +79,10 @@ Field penting:
   Daftar aksi aman yang bisa dieksekusi bot lokal. IRIS sebaiknya memilih salah satu intent dari daftar ini.
 - `localContext`
   Konteks kemampuan bot lokal, jumlah dokumen tersimpan, dan pemisahan antara arsip lokal vs informasi umum.
+- `intentGuidance`
+  Aturan ringkas human-centered agar IRIS memilih intent dengan aman dan konsisten.
+- `intentExamples`
+  Contoh RAG percakapan paling relevan untuk pesan saat ini. IRIS sebaiknya meniru pola `decision` contoh ketika konteksnya mirip.
 
 ## Response body
 

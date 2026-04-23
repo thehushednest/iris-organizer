@@ -174,6 +174,8 @@ Response contoh:
 
 Bot mengirim `supportedActions` ke IRIS di setiap request. IRIS sebaiknya memilih salah satu aksi aman tersebut, misalnya `list_documents`, `search_documents`, `send_file`, `save_text`, `ask_general_info`, `help`, `cancel`, atau `clarify`.
 
+Bot juga mengirim `intentGuidance` dan `intentExamples` sebagai RAG skenario percakapan. Contoh ini membantu IRIS membedakan kasus seperti `kirim list dokumen` yang berarti `list_documents`, bukan `send_file`.
+
 Detail contract lengkap ada di `docs/iris-api-contract.md`.
 
 ## Catatan penting
