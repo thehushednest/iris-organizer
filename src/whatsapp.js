@@ -177,6 +177,31 @@ function normalizeText(value) {
   return String(value || "").replace(/\s+/g, " ").trim();
 }
 
+function collectStringValuesDeep(value, output = new Set()) {
+  if (value == null) {
+    return output;
+  }
+
+  if (typeof value === "string" || typeof value === "number") {
+    const text = String(value).trim();
+    if (text) {
+      output.add(text);
+    }
+    return output;
+  }
+
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectStringValuesDeep(item, output));
+    return output;
+  }
+
+  if (typeof value === "object") {
+    Object.values(value).forEach((item) => collectStringValuesDeep(item, output));
+  }
+
+  return output;
+}
+
 function unwrapMessageContent(content) {
   let current = content || {};
 
@@ -222,19 +247,24 @@ function getMessageText(message) {
   );
 }
 
-function getContextInfo(message) {
+function getContextInfoCandidates(message) {
   const content = unwrapMessageContent(message.message || {});
 
-  return (
-    (content.extendedTextMessage && content.extendedTextMessage.contextInfo) ||
-    (content.imageMessage && content.imageMessage.contextInfo) ||
-    (content.videoMessage && content.videoMessage.contextInfo) ||
-    (content.documentMessage && content.documentMessage.contextInfo) ||
-    (content.audioMessage && content.audioMessage.contextInfo) ||
-    (content.buttonsResponseMessage && content.buttonsResponseMessage.contextInfo) ||
-    (content.templateButtonReplyMessage && content.templateButtonReplyMessage.contextInfo) ||
-    {}
-  );
+  return [
+    content.messageContextInfo,
+    content.contextInfo,
+    content.extendedTextMessage && content.extendedTextMessage.contextInfo,
+    content.imageMessage && content.imageMessage.contextInfo,
+    content.videoMessage && content.videoMessage.contextInfo,
+    content.documentMessage && content.documentMessage.contextInfo,
+    content.audioMessage && content.audioMessage.contextInfo,
+    content.buttonsResponseMessage && content.buttonsResponseMessage.contextInfo,
+    content.templateButtonReplyMessage && content.templateButtonReplyMessage.contextInfo,
+  ].filter((item) => item && typeof item === "object");
+}
+
+function getContextInfo(message) {
+  return getContextInfoCandidates(message)[0] || {};
 }
 
 function isGroupJid(jid) {
@@ -242,8 +272,20 @@ function isGroupJid(jid) {
 }
 
 function getOwnIdentityAliases(client) {
-  const userId = client && client.user ? client.user.id : "";
-  return buildIdentitySet([userId]);
+  const candidates = [];
+  if (client && client.user && typeof client.user === "object") {
+    Object.values(client.user).forEach((value) => {
+      if (typeof value === "string") {
+        candidates.push(value);
+      }
+    });
+  }
+
+  if (client && Array.isArray(client.__identityCandidates)) {
+    candidates.push(...client.__identityCandidates);
+  }
+
+  return buildIdentitySet(candidates);
 }
 
 function hasBotMention(client, message) {
@@ -255,6 +297,20 @@ function hasBotMention(client, message) {
 
   const selfAliases = getOwnIdentityAliases(client);
   return mentioned.some((jid) => expandIdentityAliases(jid).some((alias) => selfAliases.has(alias)));
+}
+
+function getMentionDebug(client, message) {
+  const contextInfo = getContextInfo(message);
+  const contextCandidates = getContextInfoCandidates(message);
+  return {
+    text: getMessageText(message),
+    mentionedJid: Array.isArray(contextInfo.mentionedJid) ? contextInfo.mentionedJid : [],
+    rawMentionedJid: contextCandidates.flatMap((candidate) =>
+      Array.isArray(candidate.mentionedJid) ? candidate.mentionedJid : [],
+    ),
+    contextCandidateCount: contextCandidates.length,
+    selfAliases: Array.from(getOwnIdentityAliases(client)),
+  };
 }
 
 async function downloadMediaFromContent(content) {
@@ -340,6 +396,13 @@ async function createClient(config, hooks = {}) {
     logger: pino({ level: "silent" }),
     printQRInTerminal: false,
   });
+  client.__identityCandidates = Array.from(
+    collectStringValuesDeep([
+      client.user,
+      state && state.creds && state.creds.me,
+      state && state.creds && state.creds.account,
+    ]),
+  );
 
   client.ev.on("creds.update", saveCreds);
   client.ev.on("lid-mapping.update", (payload) => {
@@ -450,11 +513,14 @@ async function normalizeIncoming(config, client, message, hooks = {}) {
   const groupMessage = isGroupJid(chatId);
   const mentionsBot = hasBotMention(client, message);
   if (groupMessage && !mentionsBot) {
+    const debug = getMentionDebug(client, message);
     if (typeof hooks.onIgnored === "function") {
       hooks.onIgnored({
         reason: "group_without_mention",
         chatId,
         senderNumber,
+        mentionDebug: debug,
+        text: getMessageText(message),
       });
     }
     return null;

@@ -888,6 +888,19 @@ class OrganizerService extends EventEmitter {
         }
 
         if (event.reason === "group_without_mention") {
+          this.log(
+            `[bot] Pesan grup diabaikan karena mention bot belum terdeteksi. Grup: ${event.chatId || "-"}. Teks: ${
+              event.text || "-"
+            }. MentionedJid: ${
+              event.mentionDebug && event.mentionDebug.rawMentionedJid && event.mentionDebug.rawMentionedJid.length > 0
+                ? event.mentionDebug.rawMentionedJid.join(", ")
+                : "-"
+            }. Alias bot: ${
+              event.mentionDebug && event.mentionDebug.selfAliases && event.mentionDebug.selfAliases.length > 0
+                ? event.mentionDebug.selfAliases.join(", ")
+                : "-"
+            }.`,
+          );
           return;
         }
 
