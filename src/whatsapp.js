@@ -177,29 +177,30 @@ function normalizeText(value) {
   return String(value || "").replace(/\s+/g, " ").trim();
 }
 
-function collectStringValuesDeep(value, output = new Set()) {
-  if (value == null) {
-    return output;
-  }
-
-  if (typeof value === "string" || typeof value === "number") {
-    const text = String(value).trim();
-    if (text) {
-      output.add(text);
+function collectOwnIdentityCandidates(client, state) {
+  const candidates = new Set();
+  const add = (value) => {
+    if (typeof value === "string" || typeof value === "number") {
+      const text = String(value).trim();
+      if (text) {
+        candidates.add(text);
+      }
     }
-    return output;
-  }
+  };
 
-  if (Array.isArray(value)) {
-    value.forEach((item) => collectStringValuesDeep(item, output));
-    return output;
-  }
+  const user = client && client.user ? client.user : {};
+  const me = state && state.creds && state.creds.me ? state.creds.me : {};
 
-  if (typeof value === "object") {
-    Object.values(value).forEach((item) => collectStringValuesDeep(item, output));
-  }
+  add(user.id);
+  add(user.lid);
+  add(user.phoneNumber);
+  add(user.jid);
+  add(me.id);
+  add(me.lid);
+  add(me.phoneNumber);
+  add(me.jid);
 
-  return output;
+  return Array.from(candidates);
 }
 
 function unwrapMessageContent(content) {
@@ -397,13 +398,7 @@ async function createClient(config, hooks = {}) {
     logger: pino({ level: "silent" }),
     printQRInTerminal: false,
   });
-  client.__identityCandidates = Array.from(
-    collectStringValuesDeep([
-      client.user,
-      state && state.creds && state.creds.me,
-      state && state.creds && state.creds.account,
-    ]),
-  );
+  client.__identityCandidates = collectOwnIdentityCandidates(client, state);
 
   client.ev.on("creds.update", saveCreds);
   client.ev.on("lid-mapping.update", (payload) => {
@@ -432,6 +427,7 @@ async function createClient(config, hooks = {}) {
     }
 
     if (connection === "open") {
+      client.__identityCandidates = collectOwnIdentityCandidates(client, state);
       console.log("[whatsapp] Client ready");
       if (typeof hooks.onReady === "function") {
         hooks.onReady();
