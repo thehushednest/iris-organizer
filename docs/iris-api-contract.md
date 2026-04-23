@@ -30,7 +30,7 @@ Bot organizer ini tidak memanggil Ollama langsung. Ia memanggil project IRIS And
     },
     {
       "intent": "ask_general_info",
-      "description": "Jawab pertanyaan umum atau informasi eksternal melalui IRIS, tanpa mencari file lokal.",
+      "description": "Jawab pertanyaan umum atau informasi eksternal melalui IRIS, tanpa mencari file lokal. Reply harus jawaban final dalam satu respons sinkron.",
       "fields": ["reply"]
     }
   ],
@@ -40,7 +40,7 @@ Bot organizer ini tidak memanggil Ollama langsung. Ia memanggil project IRIS And
     "decisionPolicy": [
       "Follow-up numerik setelah lastSearchResults berarti send_file.",
       "Berita/terbaru/terkini/penelusuran web berarti ask_general_info kecuali user menyebut dokumen saya.",
-      "Status proses boleh dikirim untuk penelusuran web, tetapi gunakan bahasa natural dan sertakan ringkasan jika hasil sudah tersedia."
+      "Untuk ask_general_info, IRIS harus mengembalikan jawaban final dalam satu respons, bukan status proses terpisah."
     ]
   },
   "intentGuidance": [
@@ -88,6 +88,12 @@ Field penting:
   Aturan ringkas human-centered agar IRIS memilih intent dengan aman dan konsisten.
 - `intentExamples`
   Contoh RAG percakapan paling relevan untuk pesan saat ini. IRIS sebaiknya meniru pola `decision` contoh ketika konteksnya mirip.
+
+Catatan penting untuk `ask_general_info`:
+
+- Organizer saat ini bekerja secara sinkron satu request satu response.
+- Karena itu IRIS harus mengembalikan jawaban final langsung di field `reply`.
+- Response seperti "sedang mencari" tanpa hasil akhir akan dianggap belum selesai oleh bot.
 
 ## Response body
 
@@ -148,4 +154,4 @@ Bot lokal tetap menjadi executor aman:
 - Tambahkan system prompt khusus organizer
 - Validasi `intent` sebelum response dikirim ke bot
 - Lindungi endpoint dengan token internal dan allowlist IP bot jika memungkinkan
-- Untuk pertanyaan informasi umum/terkini, IRIS boleh melakukan browsing/tooling di sisi IRIS lalu mengembalikan `ask_general_info` dengan `reply`.
+- Untuk pertanyaan informasi umum/terkini, IRIS boleh melakukan browsing/tooling di sisi IRIS lalu mengembalikan `ask_general_info` dengan `reply` yang sudah final.

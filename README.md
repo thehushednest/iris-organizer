@@ -176,6 +176,8 @@ Bot mengirim `supportedActions` ke IRIS di setiap request. IRIS sebaiknya memili
 
 Bot juga mengirim `intentGuidance` dan `intentExamples` sebagai RAG skenario percakapan. Contoh ini membantu IRIS membedakan kasus seperti `kirim list dokumen` yang berarti `list_documents`, bukan `send_file`.
 
+Untuk `ask_general_info`, organizer saat ini mengharapkan **jawaban final langsung** dalam satu respons. Jika IRIS hanya mengirim status proses seperti "sedang mencari", bot akan menganggap hasil akhir belum tersedia.
+
 Detail contract lengkap ada di `docs/iris-api-contract.md`.
 
 ## Catatan penting

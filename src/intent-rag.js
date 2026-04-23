@@ -4,7 +4,7 @@ const INTENT_GUIDANCE = [
   "Gunakan send_file hanya jika user merujuk hasil terakhir, misalnya nomor, 'yang pertama', 'kirimkan', atau 'file itu'.",
   "Jika user bertanya informasi umum/terkini dan tidak menyebut arsip/dokumen saya, gunakan ask_general_info.",
   "Kata berita, terbaru, terkini, penelusuran web, internet, browsing, atau cari di web hampir selalu berarti ask_general_info, kecuali user eksplisit menyebut dokumen/arsip/file saya.",
-  "Untuk ask_general_info yang membutuhkan web, status proses boleh dikirim, tetapi tulis natural seperti sedang membantu user. Jika hasil sudah tersedia, sertakan ringkasan final di reply yang sama.",
+  "Untuk ask_general_info yang membutuhkan web, reply harus berisi jawaban final dalam satu respons sinkron. Jangan kirim status proses terpisah seperti 'sedang mencari'.",
   "Gunakan gaya ringkas, natural, dan langsung membantu. Hindari frasa template seperti 'Ini tampaknya pertanyaan informasi umum'.",
   "Pertanyaan 'siapa kamu', 'jelaskan kamu', dan sapaan tentang identitas bot adalah ask_general_info, bukan help.",
   "Jika user mencari arsip lokal, gunakan search_documents dengan searchQuery yang bersih dari kata perintah.",
@@ -98,9 +98,9 @@ const INTENT_EXAMPLES = [
     userText: "cek situasi terkini perang Iran",
     decision: {
       intent: "ask_general_info",
-      reply: "Saya cek web dulu ya. Kalau hasilnya sudah terkumpul, saya ringkas poin pentingnya di sini.",
+      reply: "Ringkasan final hasil penelusuran web yang sudah selesai, langsung siap dibaca user.",
     },
-    note: "Gunakan search_documents hanya jika user menyebut dokumen/arsip/file saya. Status proses boleh, tapi buat natural dan lanjutkan dengan ringkasan jika IRIS sudah punya hasil.",
+    note: "Gunakan search_documents hanya jika user menyebut dokumen/arsip/file saya. Jangan kirim status proses tanpa hasil akhir.",
   },
   {
     id: "local-current-info-search",

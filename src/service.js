@@ -107,7 +107,7 @@ class OrganizerService extends EventEmitter {
       {
         intent: "ask_general_info",
         description:
-          "Jawab pertanyaan umum atau informasi eksternal melalui IRIS, tanpa mencari file lokal. Reply boleh berupa status proses natural atau jawaban final.",
+          "Jawab pertanyaan umum atau informasi eksternal melalui IRIS, tanpa mencari file lokal. Reply harus jawaban final dalam satu respons sinkron.",
         fields: ["reply", "sources"],
       },
       {
@@ -331,7 +331,7 @@ class OrganizerService extends EventEmitter {
       return `Saya ${this.config.botName}. Tugas saya membantu ${this.config.ownerTitle} menyimpan dokumen, mencari arsip lokal, dan mengirimkan file yang dibutuhkan lewat WhatsApp.`;
     }
 
-    return "Saya cek web dulu ya. Saya belum menerima ringkasan hasil dari IRIS, jadi untuk sekarang saya baru bisa kasih kabar prosesnya.";
+    return "Saya belum menerima jawaban final dari IRIS untuk penelusuran web ini. Jadi saat ini saya belum bisa kirim ringkasannya.";
   }
 
   isProcessOnlyGeneralInfoReply(reply) {
@@ -537,7 +537,7 @@ class OrganizerService extends EventEmitter {
           "Follow-up numerik setelah lastSearchResults berarti send_file.",
           "Permintaan daftar/list dokumen berarti list_documents, bukan send_file.",
           "Berita/terbaru/terkini/penelusuran web berarti ask_general_info kecuali user menyebut dokumen saya.",
-          "Untuk ask_general_info, status proses boleh dikirim dengan bahasa natural. Jika hasil tersedia, sertakan ringkasan final.",
+          "Untuk ask_general_info, reply harus jawaban final dalam satu respons. Jangan kirim status proses tanpa hasil akhir.",
           "Pertanyaan identitas bot seperti siapa kamu berarti ask_general_info, bukan help.",
         ],
         storedDocumentCount: documents.length,
