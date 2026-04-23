@@ -39,7 +39,8 @@ function normalizeIdentityValue(value) {
 
   if (raw.includes("@")) {
     const [user, server] = raw.split("@");
-    const digits = String(user || "").replace(/\D/g, "");
+    const baseUser = String(user || "").split(":")[0];
+    const digits = baseUser.replace(/\D/g, "");
     return digits && server ? `${digits}@${server}` : raw;
   }
 

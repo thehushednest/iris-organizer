@@ -922,7 +922,9 @@ class OrganizerService extends EventEmitter {
     this.log(
       `[bot] Pesan diterima dari ${incoming.senderNumber}${
         incoming.media ? ` dengan file ${incoming.media.originalFileName || incoming.media.mimeType}` : ""
-      }. Identitas: ${incoming.senderIdentities && incoming.senderIdentities.length > 0 ? incoming.senderIdentities.join(", ") : "-"}.`,
+      }.${incoming.isGroup ? ` Grup: ${incoming.chatId}. Mention bot: ${incoming.mentionsBot ? "ya" : "tidak"}.` : ""} Identitas: ${
+        incoming.senderIdentities && incoming.senderIdentities.length > 0 ? incoming.senderIdentities.join(", ") : "-"
+      }.`,
     );
 
     const state =
