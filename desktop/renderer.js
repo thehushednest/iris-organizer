@@ -56,6 +56,30 @@ function appendLog(line) {
   logBox.scrollTop = logBox.scrollHeight;
 }
 
+function fitQrBox() {
+  if (!qrBox.textContent || qrBox.textContent === "QR belum tersedia.") {
+    qrBox.style.fontSize = "";
+    qrBox.style.lineHeight = "";
+    return;
+  }
+
+  qrBox.style.fontSize = "8px";
+  qrBox.style.lineHeight = "0.72";
+
+  requestAnimationFrame(() => {
+    for (let size = 8; size >= 3.5; size -= 0.25) {
+      qrBox.style.fontSize = `${size}px`;
+      qrBox.style.lineHeight = String(Math.max(0.62, size / 11));
+
+      const fitsWidth = qrBox.scrollWidth <= qrBox.clientWidth + 1;
+      const fitsHeight = qrBox.scrollHeight <= qrBox.clientHeight + 1;
+      if (fitsWidth && fitsHeight) {
+        break;
+      }
+    }
+  });
+}
+
 function renderState(payload) {
   if (!payload) return;
   statusText.textContent = payload.botName
@@ -79,9 +103,11 @@ function renderState(payload) {
 
   if (payload.qrText) {
     qrBox.textContent = payload.qrText;
+    fitQrBox();
     setBadge(qrStateBadge, "QR Tersedia", "waiting");
   } else if (!payload.running) {
     qrBox.textContent = "QR belum tersedia.";
+    fitQrBox();
     setBadge(qrStateBadge, "Belum Ada QR", "idle");
   }
 }
@@ -92,6 +118,7 @@ async function bootstrap() {
   renderState(snapshot.state);
   if (snapshot.qrText) {
     qrBox.textContent = snapshot.qrText;
+    fitQrBox();
   }
   if (Array.isArray(snapshot.logs) && snapshot.logs.length > 0) {
     logBox.textContent = snapshot.logs.join("\n");
@@ -143,6 +170,7 @@ document.getElementById("startBtn").addEventListener("click", async () => {
   renderState(result.state);
   if (result.qrText) {
     qrBox.textContent = result.qrText;
+    fitQrBox();
   }
 });
 
@@ -170,6 +198,8 @@ window.irisDesktop.onLog((line) => {
 window.irisDesktop.onStatus((payload) => {
   renderState(payload);
 });
+
+window.addEventListener("resize", fitQrBox);
 
 bootstrap().catch((error) => {
   appendLog(`Gagal memuat aplikasi: ${error.message}`);
