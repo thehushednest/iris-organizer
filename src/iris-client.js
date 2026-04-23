@@ -28,7 +28,10 @@ function heuristicDecision(text) {
   if (normalized.startsWith("kirim ") || normalized.startsWith("kirim:") || normalized.includes("kirimkan")) {
     return {
       intent: "send_file",
-      reference: text.replace(/^kirim\s*:?\s*/i, "").trim(),
+      reference: text
+        .replace(/^kirim(?:kan)?\s*:?\s*/i, "")
+        .replace(/^(ke\s+sini|sini|file(?:nya)?|dokumen(?:nya)?|hasil(?:nya)?)$/i, "")
+        .trim(),
     };
   }
 

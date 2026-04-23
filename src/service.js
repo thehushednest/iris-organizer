@@ -6,7 +6,6 @@ const { Store } = require("./store");
 const { decideIntent } = require("./iris-client");
 const { createClient, normalizeIncoming, resolveWhatsAppIds, sendText, sendDocument } = require("./whatsapp");
 const { startHttpServer } = require("./http");
-const { toWhatsAppJid } = require("./config");
 
 class OrganizerService extends EventEmitter {
   constructor(config) {
@@ -69,10 +68,21 @@ class OrganizerService extends EventEmitter {
   }
 
   deriveTitleFromConfirmation(text) {
-    const cleaned = String(text || "")
-      .replace(/^(ya|iya|ok|oke|boleh|silakan|simpan)\s*/i, "")
-      .replace(/^namanya\s+/i, "")
+    let cleaned = String(text || "")
       .trim();
+
+    const explicitName = cleaned.match(
+      /(?:dengan\s+nama|nama(?:nya)?|judul(?:nya)?|sebagai)\s+(.+)$/i,
+    );
+    if (explicitName && explicitName[1]) {
+      cleaned = explicitName[1].trim();
+    } else {
+      cleaned = cleaned
+        .replace(/^(ya|iya|ok|oke|boleh|silakan|tolong|mohon)\s+/i, "")
+        .replace(/^simpan(?:\s+saja)?(?:\s+file\s+(?:ini|tersebut))?\s*/i, "")
+        .replace(/^(file\s+ini|dokumen\s+ini)\s+/i, "")
+        .trim();
+    }
 
     return cleaned || null;
   }
@@ -87,7 +97,12 @@ class OrganizerService extends EventEmitter {
   }
 
   pickSearchResult(reference, results) {
-    const normalized = String(reference || "").trim().toLowerCase();
+    let normalized = String(reference || "").trim().toLowerCase();
+    normalized = normalized
+      .replace(/^kirim(?:kan)?\s*/i, "")
+      .replace(/^(ke\s+sini|di\s+sini|sini|file(?:nya)?|dokumen(?:nya)?|hasil(?:nya)?)$/i, "")
+      .trim();
+
     if (!normalized) {
       return results[0] || null;
     }
@@ -159,8 +174,7 @@ class OrganizerService extends EventEmitter {
 
     await sendDocument(
       this.client,
-      toWhatsAppJid,
-      incoming.senderNumber,
+      incoming.chatId,
       this.store.getAbsoluteDocumentPath(picked.record),
       {
         mimeType: picked.record.mimeType,
@@ -225,7 +239,7 @@ class OrganizerService extends EventEmitter {
       });
 
       const record = await this.store.commitPendingMedia(staged, {
-        title: caption.replace(/^simpan\s*:?\s*/i, "").trim(),
+        title: this.deriveTitleFromConfirmation(caption) || caption.replace(/^simpan\s*:?\s*/i, "").trim(),
         category: this.config.defaultCategory,
       });
 
@@ -304,6 +318,11 @@ class OrganizerService extends EventEmitter {
 
     if (/^kirim\s*:?\s*/i.test(text)) {
       await this.handleSend(incoming, state, text.replace(/^kirim\s*:?\s*/i, "").trim());
+      return;
+    }
+
+    if (/^(kirim(?:kan)?(?:\s+(?:ke\s+sini|sini|file(?:nya)?|dokumen(?:nya)?|hasil(?:nya)?))?)$/i.test(text)) {
+      await this.handleSend(incoming, state, "");
       return;
     }
 

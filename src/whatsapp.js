@@ -232,9 +232,9 @@ async function sendText(client, chatId, text) {
   await client.sendMessage(chatId, { text });
 }
 
-async function sendDocument(client, toWhatsAppJid, phoneNumber, absolutePath, options) {
+async function sendDocument(client, chatId, absolutePath, options) {
   const buffer = await fsp.readFile(absolutePath);
-  await client.sendMessage(toWhatsAppJid(phoneNumber), {
+  await client.sendMessage(chatId, {
     document: buffer,
     mimetype: options.mimeType,
     fileName: options.fileName,
