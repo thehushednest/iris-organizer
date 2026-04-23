@@ -67,9 +67,9 @@ function fitQrBox() {
   qrBox.style.lineHeight = "0.72";
 
   requestAnimationFrame(() => {
-    for (let size = 8; size >= 3.5; size -= 0.25) {
+    for (let size = 8; size >= 2.5; size -= 0.25) {
       qrBox.style.fontSize = `${size}px`;
-      qrBox.style.lineHeight = String(Math.max(0.62, size / 11));
+      qrBox.style.lineHeight = String(Math.max(0.5, size / 12));
 
       const fitsWidth = qrBox.scrollWidth <= qrBox.clientWidth + 1;
       const fitsHeight = qrBox.scrollHeight <= qrBox.clientHeight + 1;
@@ -91,11 +91,13 @@ function renderState(payload) {
     : "Bot belum berjalan. Isi konfigurasi lalu tekan Jalankan Bot.";
 
   const status = String(payload.status || "idle").toLowerCase();
-  if (status.includes("connect") || status === "running") {
+  if (status.includes("disconnect")) {
+    setBadge(connectionBadge, payload.status || "Disconnected", "error");
+  } else if (status.includes("connect") || status === "running") {
     setBadge(connectionBadge, payload.status || "Running", "running");
   } else if (status.includes("wait") || status.includes("start")) {
     setBadge(connectionBadge, payload.status || "Starting", "waiting");
-  } else if (status.includes("disconnect") || status.includes("stop")) {
+  } else if (status.includes("stop")) {
     setBadge(connectionBadge, payload.status || "Stopped", "idle");
   } else {
     setBadge(connectionBadge, payload.status || "Idle", "idle");
