@@ -2,6 +2,7 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { app, BrowserWindow, ipcMain, dialog } = require("electron");
 const axios = require("axios");
+const QRCode = require("qrcode");
 
 const { createConfig } = require("../src/config");
 const { OrganizerService } = require("../src/service");
@@ -87,7 +88,7 @@ function pushLog(message) {
   }
 }
 
-function emitStatus() {
+async function emitStatus() {
   if (!mainWindow || mainWindow.isDestroyed()) {
     return;
   }
@@ -95,19 +96,35 @@ function emitStatus() {
   const state = service ? service.getState() : { status: "stopped", running: false };
   mainWindow.webContents.send("service-status", {
     ...state,
-    qrText: serviceConfig ? "" : "",
+    ...(await readQrPayload()),
   });
 }
 
-async function readQrText() {
+async function readQrPayload() {
   if (!serviceConfig) {
-    return "";
+    return { qrText: "", qrImage: "" };
   }
 
   try {
-    return await fs.readFile(path.join(serviceConfig.logRoot, "latest-qr.txt"), "utf8");
+    const [qrText, qrRaw] = await Promise.all([
+      fs.readFile(path.join(serviceConfig.logRoot, "latest-qr.txt"), "utf8").catch(() => ""),
+      fs.readFile(path.join(serviceConfig.logRoot, "latest-qr.raw.txt"), "utf8").catch(() => ""),
+    ]);
+    const qrImage = qrRaw
+      ? await QRCode.toDataURL(qrRaw, {
+          errorCorrectionLevel: "M",
+          margin: 2,
+          scale: 8,
+          color: {
+            dark: "#06110f",
+            light: "#ffffff",
+          },
+        })
+      : "";
+
+    return { qrText, qrImage };
   } catch {
-    return "";
+    return { qrText: "", qrImage: "" };
   }
 }
 
@@ -125,7 +142,7 @@ async function startServiceWithSettings(settings) {
       mainWindow.webContents.send("service-status", {
         ...payload,
         running: Boolean(service && service.running),
-        qrText: await readQrText(),
+        ...(await readQrPayload()),
       });
     }
   });
@@ -147,10 +164,15 @@ async function stopService() {
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1180,
-    height: 840,
-    minWidth: 960,
-    minHeight: 700,
+    width: 1400,
+    height: 900,
+    minWidth: 1400,
+    minHeight: 900,
+    maxWidth: 1400,
+    maxHeight: 900,
+    resizable: false,
+    maximizable: false,
+    fullscreenable: false,
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -220,7 +242,7 @@ ipcMain.handle("service:start", async (_event, settings) => {
   return {
     ok: true,
     state: service ? service.getState() : { status: "stopped", running: false },
-    qrText: await readQrText(),
+    ...(await readQrPayload()),
   };
 });
 
@@ -234,7 +256,7 @@ ipcMain.handle("service:state", async () => {
   return {
     settings,
     state: service ? service.getState() : { status: "stopped", running: false },
-    qrText: await readQrText(),
+    ...(await readQrPayload()),
     logs: logBuffer,
   };
 });

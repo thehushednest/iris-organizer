@@ -15,6 +15,7 @@ const fields = {
 const statusText = document.getElementById("statusText");
 const statusHint = document.getElementById("statusHint");
 const qrBox = document.getElementById("qrBox");
+const qrImage = document.getElementById("qrImage");
 const logBox = document.getElementById("logBox");
 const qrStateBadge = document.getElementById("qrStateBadge");
 const connectionBadge = document.getElementById("connectionBadge");
@@ -57,7 +58,11 @@ function appendLog(line) {
 }
 
 function fitQrBox() {
-  if (!qrBox.textContent || qrBox.textContent === "QR belum tersedia.") {
+  if (
+    qrImage.src ||
+    !qrBox.textContent ||
+    qrBox.textContent === "QR belum tersedia."
+  ) {
     qrBox.style.fontSize = "";
     qrBox.style.lineHeight = "";
     return;
@@ -78,6 +83,30 @@ function fitQrBox() {
       }
     }
   });
+}
+
+function renderQr(payload) {
+  if (payload.qrImage) {
+    qrImage.src = payload.qrImage;
+    qrImage.hidden = false;
+    qrBox.hidden = true;
+    setBadge(qrStateBadge, "QR Tersedia", "waiting");
+    return;
+  }
+
+  qrImage.removeAttribute("src");
+  qrImage.hidden = true;
+  qrBox.hidden = false;
+
+  if (payload.qrText) {
+    qrBox.textContent = payload.qrText;
+    fitQrBox();
+    setBadge(qrStateBadge, "QR Tersedia", "waiting");
+  } else if (!payload.running) {
+    qrBox.textContent = "QR belum tersedia.";
+    fitQrBox();
+    setBadge(qrStateBadge, "Belum Ada QR", "idle");
+  }
 }
 
 function renderState(payload) {
@@ -103,25 +132,14 @@ function renderState(payload) {
     setBadge(connectionBadge, payload.status || "Idle", "idle");
   }
 
-  if (payload.qrText) {
-    qrBox.textContent = payload.qrText;
-    fitQrBox();
-    setBadge(qrStateBadge, "QR Tersedia", "waiting");
-  } else if (!payload.running) {
-    qrBox.textContent = "QR belum tersedia.";
-    fitQrBox();
-    setBadge(qrStateBadge, "Belum Ada QR", "idle");
-  }
+  renderQr(payload);
 }
 
 async function bootstrap() {
   const snapshot = await window.irisDesktop.getState();
   applySettings(snapshot.settings);
   renderState(snapshot.state);
-  if (snapshot.qrText) {
-    qrBox.textContent = snapshot.qrText;
-    fitQrBox();
-  }
+  renderQr(snapshot);
   if (Array.isArray(snapshot.logs) && snapshot.logs.length > 0) {
     logBox.textContent = snapshot.logs.join("\n");
   }
@@ -170,10 +188,7 @@ document.getElementById("startBtn").addEventListener("click", async () => {
   appendLog("Menjalankan bot...");
   const result = await window.irisDesktop.startService(collectSettings());
   renderState(result.state);
-  if (result.qrText) {
-    qrBox.textContent = result.qrText;
-    fitQrBox();
-  }
+  renderQr(result);
 });
 
 document.getElementById("stopBtn").addEventListener("click", async () => {
