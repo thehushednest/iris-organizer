@@ -95,14 +95,15 @@ Cek:
 
 Cek:
 
-1. nomor WhatsApp atau ID internal dari log sudah masuk ke `Nomor / ID WhatsApp Diizinkan`
-2. QR sudah benar-benar terscan
-3. status di aplikasi sudah running / connected
+1. nomor WhatsApp atau salah satu identitas dari log sudah masuk ke `Nomor / ID WhatsApp Diizinkan`
+2. pengirim tidak masuk ke `Nomor / ID WhatsApp Diblokir`
+3. QR sudah benar-benar terscan
+4. status di aplikasi sudah running / connected
 
 Jika log menulis pesan seperti:
 
 ```text
-Pesan dari 226177943912628 diabaikan
+Pesan dari 226177943912628 diabaikan. Identitas pesan: 226177943912628, 226177943912628@lid
 ```
 
-Masukkan persis angka `226177943912628` ke field `Nomor / ID WhatsApp Diizinkan`.
+Masukkan salah satu identitas yang tampil di log, misalnya `226177943912628@lid`, ke field `Nomor / ID WhatsApp Diizinkan`.

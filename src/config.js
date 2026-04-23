@@ -18,7 +18,7 @@ function parseList(value) {
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean)
-    .map((item) => item.replace(/\D/g, ""));
+    .map((item) => item.toLowerCase());
 }
 
 function createConfig(source = {}, opts = {}) {
@@ -30,6 +30,7 @@ function createConfig(source = {}, opts = {}) {
     ownerTitle: source.BOT_OWNER_TITLE || "Bapak",
     whatsappSessionDir: path.resolve(cwd, source.WHATSAPP_SESSION_DIR || "./runtime/session"),
     whatsappAllowedNumbers: parseList(source.WHATSAPP_ALLOWED_NUMBERS),
+    whatsappBlockedNumbers: parseList(source.WHATSAPP_BLOCKED_NUMBERS),
     storageRoot: path.resolve(cwd, source.STORAGE_ROOT || "./runtime/storage"),
     stateRoot: path.resolve(cwd, source.STATE_ROOT || "./runtime/state"),
     logRoot: path.resolve(cwd, source.LOG_ROOT || "./runtime/logs"),

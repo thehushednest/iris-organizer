@@ -20,6 +20,7 @@ Edit `.env`, isi minimal:
 BOT_NAME=IRIS Organizer - Nama Anda
 BOT_OWNER_TITLE=Bapak
 WHATSAPP_ALLOWED_NUMBERS=628xxxxxxxxxx
+WHATSAPP_BLOCKED_NUMBERS=
 BOT_API_TOKEN=token_bot_lokal
 IRIS_BASE_URL=http://IP-SERVER-IRIS:3000
 IRIS_API_TOKEN=internal_api_token_iris

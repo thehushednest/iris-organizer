@@ -26,6 +26,7 @@ function defaultSettings() {
     botName: "IRIS Organizer",
     ownerTitle: "Bapak",
     allowedNumbers: "",
+    blockedNumbers: "",
     botApiToken: "local-bot-token",
     botHttpPort: "8030",
     irisBaseUrl: "http://127.0.0.1:3000",
@@ -62,6 +63,7 @@ function buildServiceConfigFromSettings(settings) {
       BOT_NAME: settings.botName,
       BOT_OWNER_TITLE: settings.ownerTitle,
       WHATSAPP_ALLOWED_NUMBERS: settings.allowedNumbers,
+      WHATSAPP_BLOCKED_NUMBERS: settings.blockedNumbers,
       WHATSAPP_SESSION_DIR: path.join(runtimeRoot, "session"),
       STORAGE_ROOT: path.join(runtimeRoot, "storage"),
       STATE_ROOT: path.join(runtimeRoot, "state"),
@@ -151,6 +153,20 @@ async function startServiceWithSettings(settings) {
     await saveSettings({ ...current, allowedNumbers });
     pushLog(`[app] Whitelist tersimpan otomatis: ${allowedNumbers}`);
   });
+  service.on("blacklist-resolved", async (payload) => {
+    const current = await loadSettings();
+    const blockedNumbers = Array.from(
+      new Set([
+        ...String(current.blockedNumbers || "")
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean),
+        ...payload.blockedNumbers,
+      ]),
+    ).join(",");
+    await saveSettings({ ...current, blockedNumbers });
+    pushLog(`[app] Blacklist tersimpan otomatis: ${blockedNumbers}`);
+  });
   service.on("status", async (payload) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send("service-status", {
@@ -227,7 +243,7 @@ ipcMain.handle("settings:load", async () => {
 ipcMain.handle("settings:save", async (_event, settings) => {
   await saveSettings(settings);
   if (service) {
-    pushLog("[app] Konfigurasi baru disimpan. Bot direstart agar whitelist terbaru aktif.");
+    pushLog("[app] Konfigurasi baru disimpan. Bot direstart agar whitelist/blacklist terbaru aktif.");
     await startServiceWithSettings(settings);
     await emitStatus();
   }

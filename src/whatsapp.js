@@ -31,6 +31,66 @@ function extractSenderNumber(chatId, participant) {
     .replace(/\D/g, "");
 }
 
+function normalizeIdentityValue(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (!raw) {
+    return "";
+  }
+
+  if (raw.includes("@")) {
+    const [user, server] = raw.split("@");
+    const digits = String(user || "").replace(/\D/g, "");
+    return digits && server ? `${digits}@${server}` : raw;
+  }
+
+  return raw.replace(/\D/g, "");
+}
+
+function expandIdentityAliases(value) {
+  const normalized = normalizeIdentityValue(value);
+  if (!normalized) {
+    return [];
+  }
+
+  const aliases = new Set([normalized]);
+  const digits = normalized.split("@")[0].replace(/\D/g, "");
+  if (digits) {
+    aliases.add(digits);
+    aliases.add(`${digits}@s.whatsapp.net`);
+    aliases.add(`${digits}@lid`);
+  }
+
+  return Array.from(aliases);
+}
+
+function buildIdentitySet(values) {
+  const identities = new Set();
+  values.forEach((value) => {
+    expandIdentityAliases(value).forEach((alias) => identities.add(alias));
+  });
+  return identities;
+}
+
+function collectKeyIdentities(message) {
+  const key = (message && message.key) || {};
+  const attrs = key && typeof key === "object" ? key : {};
+  const candidates = [
+    attrs.remoteJid,
+    attrs.participant,
+    attrs.remoteJidAlt,
+    attrs.participantAlt,
+    attrs.senderPn,
+    attrs.senderLid,
+    attrs.participantPn,
+    attrs.participantLid,
+    attrs.chat,
+    attrs.from,
+    attrs.id && attrs.remoteJid,
+  ];
+
+  return buildIdentitySet(candidates);
+}
+
 function collectDigitsDeep(value, output = new Set()) {
   if (value == null) {
     return output;
@@ -56,12 +116,33 @@ function collectDigitsDeep(value, output = new Set()) {
   return output;
 }
 
-function isAuthorizedNumber(senderNumber) {
-  if (this.config.whatsappAllowedNumbers.length === 0) {
-    return true;
+function matchIdentity(list, identities) {
+  const configured = buildIdentitySet(list || []);
+  for (const identity of identities) {
+    if (configured.has(identity)) {
+      return identity;
+    }
   }
 
-  return this.config.whatsappAllowedNumbers.includes(senderNumber);
+  return null;
+}
+
+function getAccessDecision(config, identities) {
+  const blockedMatch = matchIdentity(config.whatsappBlockedNumbers, identities);
+  if (blockedMatch) {
+    return { allowed: false, reason: "blocked", matchedIdentity: blockedMatch };
+  }
+
+  if (!config.whatsappAllowedNumbers || config.whatsappAllowedNumbers.length === 0) {
+    return { allowed: true, reason: "open" };
+  }
+
+  const allowedMatch = matchIdentity(config.whatsappAllowedNumbers, identities);
+  if (allowedMatch) {
+    return { allowed: true, reason: "allowed", matchedIdentity: allowedMatch };
+  }
+
+  return { allowed: false, reason: "unauthorized" };
 }
 
 function normalizeText(value) {
@@ -161,6 +242,16 @@ async function createClient(config, hooks = {}) {
   });
 
   client.ev.on("creds.update", saveCreds);
+  client.ev.on("lid-mapping.update", (payload) => {
+    if (typeof hooks.onIdentityMapping === "function") {
+      hooks.onIdentityMapping({ source: "lid-mapping.update", payload });
+    }
+  });
+  client.ev.on("messaging-history.set", (payload) => {
+    if (payload && payload.lidPnMappings && typeof hooks.onIdentityMapping === "function") {
+      hooks.onIdentityMapping({ source: "messaging-history.set", payload: payload.lidPnMappings });
+    }
+  });
   client.ev.on("connection.update", (update) => {
     const { connection, lastDisconnect, qr } = update;
     if (typeof hooks.onConnectionUpdate === "function") {
@@ -207,7 +298,8 @@ async function resolveWhatsAppIds(client, numbers) {
   const inputDigits = Array.from(
     new Set(
       (numbers || [])
-        .map((number) => String(number || "").replace(/\D/g, ""))
+        .flatMap((number) => expandIdentityAliases(number))
+        .map((number) => String(number || "").split("@")[0].replace(/\D/g, ""))
         .filter(Boolean),
     ),
   );
@@ -255,12 +347,16 @@ async function normalizeIncoming(config, client, message, hooks = {}) {
   }
 
   const senderNumber = extractSenderNumber(chatId, message.key && message.key.participant);
-  if (!isAuthorizedNumber.call({ config }, senderNumber)) {
+  const senderIdentities = collectKeyIdentities(message);
+  const access = getAccessDecision(config, senderIdentities);
+  if (!access.allowed) {
     if (typeof hooks.onIgnored === "function") {
       hooks.onIgnored({
-        reason: "unauthorized",
+        reason: access.reason,
         chatId,
         senderNumber,
+        senderIdentities: Array.from(senderIdentities),
+        matchedIdentity: access.matchedIdentity,
       });
     }
     return null;
@@ -269,6 +365,7 @@ async function normalizeIncoming(config, client, message, hooks = {}) {
   return {
     chatId,
     senderNumber,
+    senderIdentities: Array.from(senderIdentities),
     messageId: message.key && message.key.id,
     text: getMessageText(message),
     media: await extractMedia(client, message),
@@ -277,6 +374,7 @@ async function normalizeIncoming(config, client, message, hooks = {}) {
 
 module.exports = {
   createClient,
+  expandIdentityAliases,
   normalizeIncoming,
   resolveWhatsAppIds,
   sendText,

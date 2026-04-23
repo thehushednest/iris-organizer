@@ -2,6 +2,7 @@
   "botName": "IRIS Organizer",
   "ownerTitle": "Bapak",
   "allowedNumbers": "6281234567890",
+  "blockedNumbers": "",
   "botApiToken": "ganti-token-lokal-bot",
   "botHttpPort": "8031",
   "irisBaseUrl": "https://iris.cakrawalasasmita.com",

@@ -70,8 +70,9 @@ Jika `.env` belum ada, script itu akan membuat `.env` dari template lalu berhent
 
 1. edit `.env`
 2. isi `IRIS_BASE_URL`, `IRIS_DECIDE_PATH`, `IRIS_API_TOKEN`
-3. isi `WHATSAPP_ALLOWED_NUMBERS`
-4. jalankan lagi:
+3. isi `WHATSAPP_ALLOWED_NUMBERS` jika hanya nomor/ID tertentu yang boleh akses
+4. isi `WHATSAPP_BLOCKED_NUMBERS` jika ada nomor/ID yang harus diblokir
+5. jalankan lagi:
 
 ```bash
 ./scripts/setup.sh
@@ -195,8 +196,9 @@ Yang biasanya berbeda per kolega:
 1. `BOT_NAME`
 2. `BOT_OWNER_TITLE`
 3. `WHATSAPP_ALLOWED_NUMBERS`
-4. `BOT_API_TOKEN`
-5. `BOT_HTTP_PORT` jika perlu
+4. `WHATSAPP_BLOCKED_NUMBERS` jika perlu
+5. `BOT_API_TOKEN`
+6. `BOT_HTTP_PORT` jika perlu
 
 ## Rekomendasi untuk mesin baru
 

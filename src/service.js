@@ -4,7 +4,14 @@ const EventEmitter = require("node:events");
 
 const { Store } = require("./store");
 const { decideIntent } = require("./iris-client");
-const { createClient, normalizeIncoming, resolveWhatsAppIds, sendText, sendDocument } = require("./whatsapp");
+const {
+  createClient,
+  expandIdentityAliases,
+  normalizeIncoming,
+  resolveWhatsAppIds,
+  sendText,
+  sendDocument,
+} = require("./whatsapp");
 const { startHttpServer } = require("./http");
 
 class OrganizerService extends EventEmitter {
@@ -139,6 +146,84 @@ class OrganizerService extends EventEmitter {
 
     normalized.intent = aliases[normalized.intent] || normalized.intent;
     return normalized;
+  }
+
+  collectIdentityMappingGroups(value, groups = []) {
+    if (value == null) {
+      return groups;
+    }
+
+    if (Array.isArray(value)) {
+      value.forEach((item) => this.collectIdentityMappingGroups(item, groups));
+      return groups;
+    }
+
+    if (typeof value !== "object") {
+      return groups;
+    }
+
+    const aliases = new Set();
+    for (const [key, item] of Object.entries(value)) {
+      if (!/(jid|lid|pn|phone|number|user)/i.test(key)) {
+        continue;
+      }
+
+      expandIdentityAliases(item).forEach((alias) => aliases.add(alias));
+    }
+
+    if (aliases.size > 1) {
+      groups.push(Array.from(aliases));
+    }
+
+    Object.values(value).forEach((item) => this.collectIdentityMappingGroups(item, groups));
+    return groups;
+  }
+
+  async absorbIdentityMapping(event) {
+    if (!event) {
+      return;
+    }
+
+    const mergeMappedAliases = (currentList) => {
+      const configuredAliases = new Set(currentList.flatMap((item) => expandIdentityAliases(item)));
+      const additions = new Set();
+
+      for (const group of this.collectIdentityMappingGroups(event.payload)) {
+        if (!group.some((alias) => configuredAliases.has(alias))) {
+          continue;
+        }
+
+        group.forEach((alias) => additions.add(alias));
+      }
+
+      const before = new Set(currentList);
+      const merged = Array.from(new Set([...currentList, ...additions]));
+      return { merged, added: merged.filter((item) => !before.has(item)) };
+    };
+
+    if (this.config.whatsappAllowedNumbers.length > 0) {
+      const allowed = mergeMappedAliases(this.config.whatsappAllowedNumbers);
+      if (allowed.added.length > 0) {
+        this.config.whatsappAllowedNumbers = allowed.merged;
+        this.log(`[app] Whitelist WhatsApp otomatis ditambah dari mapping PN/LID: ${allowed.added.join(", ")}`);
+        this.emit("whitelist-resolved", {
+          allowedNumbers: allowed.merged,
+          added: allowed.added,
+        });
+      }
+    }
+
+    if (this.config.whatsappBlockedNumbers.length > 0) {
+      const blocked = mergeMappedAliases(this.config.whatsappBlockedNumbers);
+      if (blocked.added.length > 0) {
+        this.config.whatsappBlockedNumbers = blocked.merged;
+        this.log(`[app] Blacklist WhatsApp otomatis ditambah dari mapping PN/LID: ${blocked.added.join(", ")}`);
+        this.emit("blacklist-resolved", {
+          blockedNumbers: blocked.merged,
+          added: blocked.added,
+        });
+      }
+    }
   }
 
   cleanSearchQuery(text) {
@@ -540,13 +625,28 @@ class OrganizerService extends EventEmitter {
 
     const incoming = await normalizeIncoming(this.config, this.client, rawMessage, {
       onIgnored: (event) => {
+        if (event.reason === "blocked") {
+          this.log(
+            `[bot] Pesan dari ${event.senderNumber || "nomor tidak dikenal"} diblokir oleh blacklist. Identitas: ${
+              event.senderIdentities && event.senderIdentities.length > 0
+                ? event.senderIdentities.join(", ")
+                : "-"
+            }.`,
+          );
+          return;
+        }
+
         if (event.reason === "unauthorized") {
           const activeWhitelist =
             this.config.whatsappAllowedNumbers.length > 0
               ? this.config.whatsappAllowedNumbers.join(", ")
               : "semua nomor diizinkan";
           this.log(
-            `[bot] Pesan dari ${event.senderNumber || "nomor tidak dikenal"} diabaikan. Whitelist aktif: ${activeWhitelist}. Tambahkan persis ID/nomor pengirim ke "Nomor / ID WhatsApp Diizinkan", atau kosongkan field itu untuk mengizinkan semua.`,
+            `[bot] Pesan dari ${event.senderNumber || "nomor tidak dikenal"} diabaikan. Whitelist aktif: ${activeWhitelist}. Identitas pesan: ${
+              event.senderIdentities && event.senderIdentities.length > 0
+                ? event.senderIdentities.join(", ")
+                : "-"
+            }. Tambahkan salah satu identitas itu ke "Nomor / ID WhatsApp Diizinkan", atau kosongkan field itu untuk mengizinkan semua.`,
           );
         }
       },
@@ -556,7 +656,7 @@ class OrganizerService extends EventEmitter {
     this.log(
       `[bot] Pesan diterima dari ${incoming.senderNumber}${
         incoming.media ? ` dengan file ${incoming.media.originalFileName || incoming.media.mimeType}` : ""
-      }.`,
+      }. Identitas: ${incoming.senderIdentities && incoming.senderIdentities.length > 0 ? incoming.senderIdentities.join(", ") : "-"}.`,
     );
 
     const state =
@@ -681,6 +781,15 @@ class OrganizerService extends EventEmitter {
           this.log(`[app] Gagal resolve whitelist WhatsApp: ${error.message}`);
         });
       },
+      onIdentityMapping: (event) => {
+        this.log(`[whatsapp] Identity mapping diterima dari ${event.source}. Whitelist/blacklist akan memakai alias PN/LID jika tersedia.`);
+        this.absorbIdentityMapping(event).catch((error) => {
+          this.log(`[app] Gagal menyerap identity mapping WhatsApp: ${error.message}`);
+        });
+        this.resolveWhitelistAliases().catch((error) => {
+          this.log(`[app] Gagal sinkron identity mapping WhatsApp: ${error.message}`);
+        });
+      },
     });
 
     client.ev.on("messages.upsert", (event) => {
@@ -739,6 +848,13 @@ class OrganizerService extends EventEmitter {
         this.config.whatsappAllowedNumbers.length > 0
           ? this.config.whatsappAllowedNumbers.join(", ")
           : "semua nomor diizinkan"
+      }`,
+    );
+    this.log(
+      `[app] WhatsApp blacklist aktif: ${
+        this.config.whatsappBlockedNumbers.length > 0
+          ? this.config.whatsappBlockedNumbers.join(", ")
+          : "tidak ada nomor/ID diblokir"
       }`,
     );
     this.setStatus("starting");
