@@ -43,8 +43,38 @@ function normalizeText(value) {
   return String(value || "").replace(/\s+/g, " ").trim();
 }
 
+function unwrapMessageContent(content) {
+  let current = content || {};
+
+  for (let depth = 0; depth < 5; depth += 1) {
+    if (current.ephemeralMessage && current.ephemeralMessage.message) {
+      current = current.ephemeralMessage.message;
+      continue;
+    }
+
+    if (current.viewOnceMessage && current.viewOnceMessage.message) {
+      current = current.viewOnceMessage.message;
+      continue;
+    }
+
+    if (current.viewOnceMessageV2 && current.viewOnceMessageV2.message) {
+      current = current.viewOnceMessageV2.message;
+      continue;
+    }
+
+    if (current.documentWithCaptionMessage && current.documentWithCaptionMessage.message) {
+      current = current.documentWithCaptionMessage.message;
+      continue;
+    }
+
+    break;
+  }
+
+  return current;
+}
+
 function getMessageText(message) {
-  const content = message.message || {};
+  const content = unwrapMessageContent(message.message || {});
 
   return normalizeText(
     content.conversation ||
@@ -60,7 +90,7 @@ function getMessageText(message) {
 
 async function extractMedia(client, message) {
   const { downloadMediaMessage, getContentType } = await getBaileys();
-  const content = message.message || {};
+  const content = unwrapMessageContent(message.message || {});
   const contentType = getContentType(content);
   if (!contentType) return null;
 
@@ -158,14 +188,27 @@ async function sendDocument(client, toWhatsAppJid, phoneNumber, absolutePath, op
   });
 }
 
-async function normalizeIncoming(config, client, message) {
+async function normalizeIncoming(config, client, message, hooks = {}) {
   const chatId = message && message.key ? message.key.remoteJid : null;
   if (!chatId || chatId === "status@broadcast" || (message.key && message.key.fromMe)) {
+    if (typeof hooks.onIgnored === "function") {
+      hooks.onIgnored({
+        reason: message && message.key && message.key.fromMe ? "from_me" : "unsupported_chat",
+        chatId,
+      });
+    }
     return null;
   }
 
   const senderNumber = extractSenderNumber(chatId, message.key && message.key.participant);
   if (!isAuthorizedNumber.call({ config }, senderNumber)) {
+    if (typeof hooks.onIgnored === "function") {
+      hooks.onIgnored({
+        reason: "unauthorized",
+        chatId,
+        senderNumber,
+      });
+    }
     return null;
   }
 

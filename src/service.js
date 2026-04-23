@@ -209,6 +209,9 @@ class OrganizerService extends EventEmitter {
 
   async handleMedia(incoming, state) {
     const caption = String((incoming.media && incoming.media.caption) || "").trim();
+    this.log(
+      `[bot] Memproses file ${incoming.media.originalFileName || incoming.media.mimeType} dengan caption "${caption || "-"}".`,
+    );
 
     if (/^simpan\s*:?\s*/i.test(caption)) {
       const staged = await this.store.stageMedia({
@@ -226,6 +229,7 @@ class OrganizerService extends EventEmitter {
         category: this.config.defaultCategory,
       });
 
+      this.log(`[bot] File disimpan: ${record.relativePath}`);
       await sendText(
         this.client,
         incoming.chatId,
@@ -243,6 +247,7 @@ class OrganizerService extends EventEmitter {
       buffer: incoming.media.buffer,
       messageId: incoming.messageId,
     });
+    this.log(`[bot] File distage sementara: ${staged.relativePath}`);
 
     await this.store.saveConversation({
       ...state,
@@ -380,8 +385,27 @@ class OrganizerService extends EventEmitter {
   }
 
   async processMessage(rawMessage) {
-    const incoming = await normalizeIncoming(this.config, this.client, rawMessage);
+    if (rawMessage && rawMessage.key && rawMessage.key.fromMe) {
+      this.log("[bot] Pesan outgoing/fromMe diabaikan. Kirim perintah dari nomor WhatsApp lain ke nomor bot.");
+      return;
+    }
+
+    const incoming = await normalizeIncoming(this.config, this.client, rawMessage, {
+      onIgnored: (event) => {
+        if (event.reason === "unauthorized") {
+          this.log(
+            `[bot] Pesan dari ${event.senderNumber || "nomor tidak dikenal"} diabaikan karena tidak ada di Nomor WhatsApp Diizinkan.`,
+          );
+        }
+      },
+    });
     if (!incoming) return;
+
+    this.log(
+      `[bot] Pesan diterima dari ${incoming.senderNumber}${
+        incoming.media ? ` dengan file ${incoming.media.originalFileName || incoming.media.mimeType}` : ""
+      }.`,
+    );
 
     const state =
       (await this.store.getConversation(incoming.chatId)) || {
