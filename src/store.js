@@ -54,6 +54,39 @@ function inferKind(mimeType) {
   return "document";
 }
 
+function getIndonesianMonthName(date) {
+  const monthNames = [
+    "Januari",
+    "Februari",
+    "Maret",
+    "April",
+    "Mei",
+    "Juni",
+    "Juli",
+    "Agustus",
+    "September",
+    "Oktober",
+    "November",
+    "Desember",
+  ];
+
+  return monthNames[date.getMonth()] || String(date.getMonth() + 1).padStart(2, "0");
+}
+
+function getIndonesianDayFolder(date) {
+  const dayNames = [
+    "Minggu",
+    "Senin",
+    "Selasa",
+    "Rabu",
+    "Kamis",
+    "Jum'at",
+    "Sabtu",
+  ];
+  const dayName = dayNames[date.getDay()] || "Hari";
+  return `${dayName} tanggal ${String(date.getDate()).padStart(2, "0")}`;
+}
+
 async function readJson(filePath, fallback) {
   try {
     const raw = await fs.readFile(filePath, "utf8");
@@ -192,8 +225,8 @@ class Store {
     const now = new Date();
     const relativePath = path.join(
       String(now.getFullYear()),
-      String(now.getMonth() + 1).padStart(2, "0"),
-      String(now.getDate()).padStart(2, "0"),
+      getIndonesianMonthName(now),
+      getIndonesianDayFolder(now),
       category,
       `${safeTitle}${item.extension}`,
     );
@@ -234,8 +267,8 @@ class Store {
     const now = new Date();
     const relativePath = path.join(
       String(now.getFullYear()),
-      String(now.getMonth() + 1).padStart(2, "0"),
-      String(now.getDate()).padStart(2, "0"),
+      getIndonesianMonthName(now),
+      getIndonesianDayFolder(now),
       category,
       `${safeTitle}.txt`,
     );

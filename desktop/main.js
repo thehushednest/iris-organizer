@@ -1,6 +1,6 @@
 const fs = require("node:fs/promises");
 const path = require("node:path");
-const { app, BrowserWindow, ipcMain, dialog } = require("electron");
+const { app, BrowserWindow, ipcMain, dialog, screen } = require("electron");
 const axios = require("axios");
 const QRCode = require("qrcode");
 
@@ -230,15 +230,17 @@ async function resetWhatsAppSession(config) {
 }
 
 function createWindow() {
+  const { workAreaSize } = screen.getPrimaryDisplay();
+  const targetWidth = Math.min(1360, Math.max(1140, workAreaSize.width - 40));
+  const targetHeight = Math.min(860, Math.max(700, workAreaSize.height - 40));
+
   mainWindow = new BrowserWindow({
-    width: 1400,
-    height: 900,
-    minWidth: 1400,
-    minHeight: 900,
-    maxWidth: 1400,
-    maxHeight: 900,
-    resizable: false,
-    maximizable: false,
+    width: targetWidth,
+    height: targetHeight,
+    minWidth: 1100,
+    minHeight: 700,
+    resizable: true,
+    maximizable: true,
     fullscreenable: false,
     autoHideMenuBar: true,
     webPreferences: {
