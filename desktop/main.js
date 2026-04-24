@@ -185,8 +185,15 @@ async function startServiceWithSettings(settings) {
     }
   });
 
-  await service.start();
-  pushLog(`Service started for ${serviceConfig.botName}`);
+  try {
+    await service.start();
+    pushLog(`Service started for ${serviceConfig.botName}`);
+  } catch (error) {
+    pushLog(`[app] Gagal menjalankan service: ${error.message}`);
+    service.removeAllListeners();
+    service = null;
+    throw error;
+  }
 }
 
 async function stopService() {

@@ -31,6 +31,7 @@ class OrganizerService extends EventEmitter {
     this.reconnectAttempts = 0;
     this.replacingClient = false;
     this.groupCatalog = [];
+    this.messageQueue = Promise.resolve();
   }
 
   helpText() {
@@ -71,6 +72,15 @@ class OrganizerService extends EventEmitter {
       this.config.logRoot,
     ].forEach((dir) => {
       fs.mkdirSync(dir, { recursive: true });
+    });
+  }
+
+  clearQrArtifacts() {
+    this.lastQr = "";
+    ["latest-qr.txt", "latest-qr.raw.txt"].forEach((fileName) => {
+      try {
+        fs.rmSync(path.join(this.config.logRoot, fileName), { force: true });
+      } catch {}
     });
   }
 
@@ -1007,6 +1017,12 @@ class OrganizerService extends EventEmitter {
     await this.handleText(incoming, state);
   }
 
+  enqueueMessageProcessing(rawMessage) {
+    const run = this.messageQueue.then(() => this.processMessage(rawMessage));
+    this.messageQueue = run.catch(() => {});
+    return run;
+  }
+
   getDisconnectStatusCode(update) {
     return update && update.lastDisconnect && update.lastDisconnect.error && update.lastDisconnect.error.output
       ? update.lastDisconnect.error.output.statusCode
@@ -1025,8 +1041,9 @@ class OrganizerService extends EventEmitter {
 
     const statusCode = this.getDisconnectStatusCode(update);
     if (statusCode === 401) {
+      this.clearQrArtifacts();
       this.log("[whatsapp] Session logged out. Hapus session dan scan QR ulang.");
-      this.setStatus("logged_out", { qrAvailable: Boolean(this.lastQr) });
+      this.setStatus("logged_out", { qrAvailable: false });
       return;
     }
 
@@ -1098,10 +1115,12 @@ class OrganizerService extends EventEmitter {
       },
       onConnectionUpdate: (update) => {
         if (update.connection === "open") {
+          this.clearQrArtifacts();
           this.reconnectAttempts = 0;
-          this.setStatus("connected", { qrAvailable: Boolean(this.lastQr) });
+          this.setStatus("connected", { qrAvailable: false });
         } else if (update.connection === "close") {
-          this.setStatus("disconnected", { qrAvailable: Boolean(this.lastQr) });
+          this.clearQrArtifacts();
+          this.setStatus("disconnected", { qrAvailable: false });
           this.scheduleReconnect(update);
         }
       },
@@ -1148,7 +1167,7 @@ class OrganizerService extends EventEmitter {
         }
 
         Promise.resolve()
-          .then(() => this.processMessage(rawMessage))
+          .then(() => this.enqueueMessageProcessing(rawMessage))
           .catch((error) => {
             this.log(`[bot] Failed to process message: ${error.message}`);
           });
@@ -1214,12 +1233,24 @@ class OrganizerService extends EventEmitter {
       }`,
     );
     this.setStatus("starting");
-    this.running = true;
 
-    await this.openWhatsAppClient();
+    try {
+      await this.openWhatsAppClient();
+      this.httpServer = await startHttpServer(this.config, { store: this.store, client: this.client });
+      this.running = true;
+      this.setStatus("running", { qrAvailable: Boolean(this.lastQr) });
+    } catch (error) {
+      if (this.httpServer && typeof this.httpServer.close === "function") {
+        await this.httpServer.close().catch(() => {});
+      }
 
-    this.httpServer = await startHttpServer(this.config, { store: this.store, client: this.client });
-    this.setStatus("running", { qrAvailable: Boolean(this.lastQr) });
+      this.httpServer = null;
+      this.running = false;
+      this.reconnectAttempts = 0;
+      await this.closeWhatsAppClient();
+      this.setStatus("stopped", { qrAvailable: Boolean(this.lastQr) });
+      throw error;
+    }
   }
 
   async stop() {
@@ -1244,7 +1275,8 @@ class OrganizerService extends EventEmitter {
     this.httpServer = null;
     this.running = false;
     this.reconnectAttempts = 0;
-    this.setStatus("stopped", { qrAvailable: Boolean(this.lastQr) });
+    this.clearQrArtifacts();
+    this.setStatus("stopped", { qrAvailable: false });
   }
 
   getState() {

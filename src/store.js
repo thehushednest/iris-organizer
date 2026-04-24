@@ -72,6 +72,27 @@ async function writeJson(filePath, value) {
   await fs.writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
 }
 
+async function uniquePathForFile(baseAbsolutePath) {
+  const parsed = path.parse(baseAbsolutePath);
+
+  for (let attempt = 0; attempt < 1000; attempt += 1) {
+    const suffix = attempt === 0 ? "" : `-${attempt + 1}`;
+    const candidate = path.join(parsed.dir, `${parsed.name}${suffix}${parsed.ext}`);
+
+    try {
+      await fs.access(candidate);
+    } catch (error) {
+      if (error && error.code === "ENOENT") {
+        return candidate;
+      }
+
+      throw error;
+    }
+  }
+
+  throw new Error(`Unable to allocate unique file path for ${baseAbsolutePath}`);
+}
+
 class Store {
   constructor(config) {
     this.config = config;
@@ -176,9 +197,11 @@ class Store {
       category,
       `${safeTitle}${item.extension}`,
     );
-    const absolutePath = path.join(this.config.storageRoot, relativePath);
+    const preferredAbsolutePath = path.join(this.config.storageRoot, relativePath);
 
-    await fs.mkdir(path.dirname(absolutePath), { recursive: true });
+    await fs.mkdir(path.dirname(preferredAbsolutePath), { recursive: true });
+    const absolutePath = await uniquePathForFile(preferredAbsolutePath);
+    const finalRelativePath = path.relative(this.config.storageRoot, absolutePath);
     await fs.rename(path.join(this.config.stateRoot, item.relativePath), absolutePath);
 
     const record = {
@@ -192,7 +215,7 @@ class Store {
       mimeType: item.mimeType,
       originalFileName: item.originalFileName,
       caption: item.caption,
-      relativePath,
+      relativePath: finalRelativePath,
       extension: item.extension,
       sizeBytes: item.sizeBytes,
       textPreview: item.caption ? summarizeText(item.caption) : null,
@@ -216,7 +239,7 @@ class Store {
       category,
       `${safeTitle}.txt`,
     );
-    const absolutePath = path.join(this.config.storageRoot, relativePath);
+    const preferredAbsolutePath = path.join(this.config.storageRoot, relativePath);
     const content =
       `Judul: ${title}\n` +
       `Kategori: ${category}\n` +
@@ -224,7 +247,9 @@ class Store {
       `Pengirim: ${input.senderNumber}\n\n` +
       `${String(input.text || "").trim()}\n`;
 
-    await fs.mkdir(path.dirname(absolutePath), { recursive: true });
+    await fs.mkdir(path.dirname(preferredAbsolutePath), { recursive: true });
+    const absolutePath = await uniquePathForFile(preferredAbsolutePath);
+    const finalRelativePath = path.relative(this.config.storageRoot, absolutePath);
     await fs.writeFile(absolutePath, content, "utf8");
 
     return this.appendDocument({
@@ -238,7 +263,7 @@ class Store {
       mimeType: "text/plain",
       originalFileName: null,
       caption: null,
-      relativePath,
+      relativePath: finalRelativePath,
       extension: ".txt",
       sizeBytes: Buffer.byteLength(content, "utf8"),
       textPreview: summarizeText(input.text),
